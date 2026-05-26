@@ -82,6 +82,6 @@ RUN chmod +x /run.sh
 # Ports: webui on 8787 (Ingress), ttyd on 7681 (host network).
 EXPOSE 8787 7681
 
-# tini reaps zombies from the bg ttyd process and forwards signals to webui.
-ENTRYPOINT ["/usr/bin/tini", "--"]
+# Do NOT override ENTRYPOINT — the HA base image's s6-overlay entrypoint
+# initialises bashio's with-contenv environment before exec'ing CMD.
 CMD ["/run.sh"]
