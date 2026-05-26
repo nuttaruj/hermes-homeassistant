@@ -39,9 +39,9 @@ fi
 # ─── Persistent dirs ────────────────────────────────────────────────────────
 mkdir -p /data/hermes /data/hermes/webui
 
-# ─── .env ───────────────────────────────────────────────────────────────────
+# ─── .env (file mode 600 — contains secrets) ────────────────────────────────
 ENV_FILE=/data/hermes/.env
-: > "${ENV_FILE}"
+( umask 077 && : > "${ENV_FILE}" )
 if [ -n "${HA_TOKEN}" ]; then
     echo "HASS_TOKEN=${HA_TOKEN}" >> "${ENV_FILE}"
     echo "HASS_URL=${HASS_URL}"   >> "${ENV_FILE}"
@@ -49,6 +49,7 @@ fi
 if [ -n "${ANTHROPIC_API_KEY}" ]; then
     echo "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}" >> "${ENV_FILE}"
 fi
+chmod 600 "${ENV_FILE}"
 
 # ─── Claude OAuth credentials (optional, from /config) ──────────────────────
 # User can copy ~/.claude/.credentials.json into /addon_configs/<slug>/ to use

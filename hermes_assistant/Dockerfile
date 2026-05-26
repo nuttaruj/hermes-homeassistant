@@ -1,4 +1,6 @@
-ARG BUILD_FROM
+# BUILD_FROM is supplied by the HA Supervisor builder per architecture.
+# The default keeps `docker build` workable locally for amd64 verification.
+ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base-debian:bookworm
 FROM ${BUILD_FROM}
 
 # ─── Build args ─────────────────────────────────────────────────────────────
