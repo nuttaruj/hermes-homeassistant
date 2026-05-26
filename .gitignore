@@ -1,0 +1,15 @@
+.DS_Store
+*.pyc
+__pycache__/
+.venv/
+node_modules/
+*.log
+
+# Local Docker build cache
+.docker-build/
+build/
+
+# Editor
+.vscode/
+.idea/
+*.swp

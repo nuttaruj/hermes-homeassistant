@@ -1,0 +1,82 @@
+name: Hermes Assistant
+version: "1.0.0"
+slug: hermes_assistant
+description: Hermes AI Agent (NousResearch) with Web UI and setup terminal for Home Assistant
+url: https://github.com/nuttaruj/hermes-homeassistant
+
+arch:
+  - amd64
+  - aarch64
+
+startup: services
+boot: auto
+init: false
+
+# Host network so the terminal port (ttyd) is reachable from LAN.
+# Webui binds 127.0.0.1 only and is exposed via Ingress.
+host_network: true
+
+# HA Ingress: embeds the webui into the HA sidebar.
+ingress: true
+ingress_port: 8787
+panel_title: Hermes Agent
+panel_icon: mdi:brain
+
+# Persistent config: addon_config maps to /config inside the container.
+# /data is the per-addon persistent volume (managed by HA Supervisor).
+map:
+  - addon_config:rw
+  - share:rw
+
+options:
+  # ── REQUIRED ────────────────────────────────────────────────────────────
+  # WebUI login password. Required because the WebUI is exposed via Ingress
+  # and (when terminal is enabled) also via host network.
+  webui_password: ""
+
+  # Terminal login password. Used by ttyd basic auth.
+  # Use this to run `hermes setup` and configure any LLM provider OAuth/API key.
+  terminal_password: ""
+
+  # HA Long-Lived Access Token (Profile → Security → Create Token).
+  # Hermes reads this as HASS_TOKEN to expose the Home Assistant toolset.
+  homeassistant_token: ""
+
+  # ── COMMON ──────────────────────────────────────────────────────────────
+  timezone: "Asia/Bangkok"
+  enable_terminal: true
+  terminal_port: 7681
+  webui_port: 8787
+
+  # ── OPTIONAL ────────────────────────────────────────────────────────────
+  # If set, written to Hermes .env as ANTHROPIC_API_KEY. Leave empty to
+  # use the OAuth/credentials flow via the terminal instead.
+  anthropic_api_key: ""
+
+  # If set, Hermes will use http://supervisor/core via the supervisor proxy
+  # instead of the default HASS_URL. Leave default in most setups.
+  hass_url: "http://homeassistant.local:8123"
+
+  # Entities for Hermes to watch (Home Assistant platform). Empty = none.
+  # User can also configure via WebUI Settings after first launch.
+  watch_entities: []
+
+schema:
+  webui_password: password
+  terminal_password: password
+  homeassistant_token: password
+  timezone: str
+  enable_terminal: bool
+  terminal_port: int(1024,65535)
+  webui_port: int(1024,65535)
+  anthropic_api_key: password?
+  hass_url: url?
+  watch_entities:
+    - str?
+
+# Ports exposed via host_network. Only ttyd is documented here; webui
+# uses Ingress and binds loopback only.
+ports:
+  7681/tcp: 7681
+ports_description:
+  7681/tcp: Hermes setup terminal (ttyd) — protect with terminal_password

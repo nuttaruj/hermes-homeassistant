@@ -1,0 +1,9 @@
+build_from:
+  amd64: ghcr.io/home-assistant/amd64-base-debian:bookworm
+  aarch64: ghcr.io/home-assistant/aarch64-base-debian:bookworm
+
+labels:
+  org.opencontainers.image.title: "Hermes Assistant"
+  org.opencontainers.image.description: "Hermes AI Agent with Web UI for Home Assistant"
+  org.opencontainers.image.source: "https://github.com/nuttaruj/hermes-homeassistant"
+  org.opencontainers.image.licenses: "MIT"
