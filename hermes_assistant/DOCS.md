@@ -6,19 +6,19 @@ Assistant. Includes a setup terminal (ttyd) so you can run `hermes setup` and
 authenticate any supported LLM provider (Anthropic, OpenAI, OAuth flows, …)
 directly from the browser.
 
+The Hermes agent is **pre-baked into the image** — first start is fast, no
+multi-minute download.
+
 ---
 
 ## First-time setup
 
 1. **Install** the add-on from the store.
 2. Open the **Configuration** tab and set:
-   - `webui_password` — used to log into the Web UI (required)
+   - `webui_password` — Web UI login password (required)
    - `terminal_password` — protects the setup terminal (required if
      `enable_terminal` is on)
-   - `homeassistant_token` — paste a Long-Lived Access Token from your HA
-     profile (Profile → Security → Create Token)
-3. **Start** the add-on. Watch the log — first start downloads and installs
-   the Hermes agent (5–10 min depending on bandwidth and architecture).
+3. **Start** the add-on.
 4. Open the **Web UI** from the sidebar (or `Open Web UI` button).
 5. Open the **Setup Terminal** at `http://HOMEASSISTANT_IP:7681`
    (user `hermes`, password = `terminal_password`).
@@ -30,6 +30,9 @@ directly from the browser.
    Claude OAuth, OpenAI, etc.). Credentials are saved under `/data/hermes/`
    and persist across add-on restarts.
 
+You do **not** need to create a Home Assistant Long-Lived Access Token —
+the add-on uses the Supervisor proxy automatically (via `homeassistant_api`).
+
 ---
 
 ## Configuration options
@@ -38,26 +41,27 @@ directly from the browser.
 |---|---|---|
 | `webui_password` | yes | Web UI login password |
 | `terminal_password` | when terminal on | Basic-auth password for ttyd |
-| `homeassistant_token` | recommended | LLA token — enables the HA toolset |
 | `timezone` | yes | IANA TZ, e.g. `Asia/Bangkok` |
 | `enable_terminal` | yes | `true` to expose setup terminal on port 7681 |
-| `terminal_port` | yes | Default `7681` |
-| `webui_port` | yes | Internal port for the Web UI (Ingress-served). Default `8787` |
-| `anthropic_api_key` | no | Bake into `.env`. Skip if you'll set via `hermes setup` |
-| `hass_url` | no | Override HA URL Hermes uses. Default `http://homeassistant.local:8123` |
-| `watch_entities` | no | List of entity IDs Hermes should watch for state changes |
+| `homeassistant_token` | no | Override the auto SUPERVISOR_TOKEN with your own LLA |
+| `anthropic_api_key` | no | Bake into `.env`. Skip if configuring via terminal |
+| `watch_entities` | no | List of entity IDs Hermes should watch |
+
+The Web UI is always served on internal port `8787` via HA Ingress.
+The setup terminal is always served on port `7681` (LAN, port-mapped).
 
 ---
 
 ## What goes where
 
-| Path | Purpose | Persists |
-|---|---|---|
-| `/data/hermes/` | All Hermes state — sessions, memories, agent venv | yes |
-| `/data/hermes/.env` | Credentials. Rewritten every start from add-on options | yes |
-| `/data/hermes/config.yaml` | Hermes platform config (kept after first create) | yes |
-| `/data/hermes/webui/` | WebUI sessions and workspace state | yes |
-| `/config/claude_credentials.json` | Optional Claude OAuth dump | yes |
+| Path | Purpose | Persists | In backup |
+|---|---|---|---|
+| `/data/hermes/` | All Hermes state | yes | yes |
+| `/data/hermes/.env` | Credentials. Rewritten every start from options (mode 600) | yes | yes |
+| `/data/hermes/config.yaml` | Hermes platform config (kept after first create) | yes | yes |
+| `/data/hermes/venv/` | Hermes agent venv (~300MB) | yes | **no** (excluded) |
+| `/data/hermes/webui/` | WebUI sessions and workspace state | yes | yes |
+| `/config/claude_credentials.json` | Optional Claude OAuth dump | yes | yes |
 
 ---
 
@@ -71,44 +75,50 @@ the add-on config directory:
    ```
    cp ~/.claude/.credentials.json /share/claude_credentials.json
    ```
-   (or copy via Samba into the `share` folder)
 2. Move the file into `/config/claude_credentials.json` of this add-on
    (via the File Editor add-on or SSH).
 3. Restart the add-on. The log will say `Claude OAuth token loaded`.
 
-OAuth tokens expire periodically — you will need to refresh this file
-when that happens, or use `anthropic_api_key` instead.
+OAuth tokens expire — refresh this file when needed, or use
+`anthropic_api_key` instead.
 
 ---
 
-## Security notes
+## Security
 
-- The **Web UI** binds `127.0.0.1` inside the container and is reachable
-  only via HA Ingress, which inherits HA's own auth.
-- The **setup terminal** is exposed on the LAN via `host_network`.
-  ttyd basic-auth is the only barrier — **always set a strong
-  `terminal_password`**. Consider setting `enable_terminal: false` between
-  setup sessions if your LAN is untrusted.
+- **Web UI** binds `127.0.0.1` inside the container and is reachable only
+  via HA Ingress, inheriting HA's auth. `panel_admin: true` restricts the
+  sidebar panel to HA admin users.
+- **Setup terminal** is exposed on the LAN via the Docker port mapping
+  (`7681/tcp: 7681`). ttyd basic-auth is the only barrier — **set a
+  strong `terminal_password`**. Disable via `enable_terminal: false`
+  between setup sessions if your LAN is untrusted.
+- `.env` is written with mode `600` (root-only).
+- HA Supervisor watchdog auto-restarts the container if the Web UI health
+  endpoint stops responding.
 
 ---
 
 ## Updating
 
-The hermes-webui version is pinned in the add-on Dockerfile (build arg
-`HERMES_WEBUI_REF`). Update by bumping the add-on version and reinstalling.
-The Hermes agent updates itself on first run after `/data/hermes/venv` is
-cleared, or via `hermes update` in the setup terminal.
+- **WebUI / agent**: bump add-on version, rebuild. The add-on pins
+  `HERMES_WEBUI_REF` and `HERMES_AGENT_REF` in the Dockerfile build args.
+- **Force agent reinstall**: SSH into the container or use the setup
+  terminal, run `rm -rf /data/hermes/venv && rm /data/hermes/.bootstrap-done`,
+  then restart. The next start mirrors a fresh agent from the image.
 
 ---
 
 ## Troubleshooting
 
-- **Web UI blank / 502 after install** — check the add-on log. First start
-  takes several minutes to install the agent. Wait until you see
-  `Hermes Web UI listening on …`.
-- **`hermes setup` says no provider configured** — run it again, the
-  install must complete first.
-- **`HASS_TOKEN` not recognised in WebUI** — check the log for
-  `Loading Hermes config`. The `.env` is regenerated on every start, so
-  make sure you saved `homeassistant_token` in Configuration and
-  restarted.
+- **Web UI shows nothing** — check the add-on log. After `Starting Hermes
+  Web UI on 127.0.0.1:8787` the UI is ready. Watchdog will restart if not.
+- **`hermes setup` says agent missing** — check
+  `/data/hermes/.bootstrap-done` exists and `/data/hermes/venv/` is
+  populated. If not, the pre-bake failed; run `bootstrap.py` manually:
+  ```
+  /opt/hermes-webui/.venv/bin/python /opt/hermes-webui/bootstrap.py --no-browser
+  ```
+- **HA integration fails** — log should say either
+  `Using auto-injected SUPERVISOR_TOKEN` or `Using user-supplied LLA`.
+  If both are missing, set `homeassistant_token` manually.
