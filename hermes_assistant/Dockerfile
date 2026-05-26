@@ -55,11 +55,12 @@ RUN curl -LsSf https://astral.sh/uv/install.sh \
       | env UV_INSTALL_DIR=/usr/local/bin INSTALLER_NO_MODIFY_PATH=1 sh \
     && uv --version
 
-# Clone hermes-webui at pinned tag + bake version
+# Clone hermes-webui at pinned tag + bake version.
+# Keep .git (small after gc) so `git pull` works when mirrored to /data and
+# auto_update_webui=true. Use --depth=1 to minimize clone size.
 RUN git clone --depth=1 --branch "${HERMES_WEBUI_REF}" \
         https://github.com/nesquena/hermes-webui.git /opt/hermes-webui \
-    && echo "__version__ = '${HERMES_WEBUI_REF}'" > /opt/hermes-webui/api/_version.py \
-    && rm -rf /opt/hermes-webui/.git
+    && echo "__version__ = '${HERMES_WEBUI_REF}'" > /opt/hermes-webui/api/_version.py
 
 # WebUI venv with minimal deps (pyyaml + cryptography)
 RUN uv venv /opt/hermes-webui/.venv --python python3 \
@@ -113,13 +114,9 @@ RUN set +e; \
     rm -f /tmp/install-hermes.sh; \
     exit 0
 
-# Strip caches + non-runtime artefacts from the agent install.
-# Saves ~350MB on the COPY into stage 2:
-#   ui-tui         ~243MB  Electron TUI app, not used by webui or CLI commands
-#   website        ~22MB   doc site source
-#   tests          ~20MB   pytest suite
-#   node_modules   ~69MB   JS deps (kept only what install.sh needs at runtime)
-#   *.git          variable
+# Strip caches + non-runtime artefacts.
+# KEEP .git for both repos so user can `hermes update` / `git pull` in the
+# live install (mirrored to /data on first boot).
 RUN set -eux; \
     find /opt/hermes-agent /opt/hermes-webui -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true; \
     rm -rf \
@@ -127,16 +124,20 @@ RUN set -eux; \
         /opt/hermes-agent-code/website \
         /opt/hermes-agent-code/tests \
         /opt/hermes-agent-code/node_modules \
-        /opt/hermes-agent-code/.git \
         /opt/hermes-agent-code/docs \
         /opt/hermes-agent-code/RELEASE_*.md \
-        /opt/hermes-webui/.git \
         /opt/hermes-webui/tests \
         /opt/hermes-webui/docs \
         /root/.cache /tmp/* /var/tmp/* 2>/dev/null || true; \
     find /opt/hermes-agent-code -type d -name "test" -prune -exec rm -rf {} + 2>/dev/null || true; \
     find /opt/hermes-agent-code -type d -name "tests" -prune -exec rm -rf {} + 2>/dev/null || true; \
-    echo "agent-code size after trim:"; du -sh /opt/hermes-agent-code /opt/hermes-agent /opt/hermes-webui
+    # Aggressive .git gc so the kept history doesn't bloat the seed
+    for d in /opt/hermes-agent-code /opt/hermes-webui; do \
+        if [ -d "$d/.git" ]; then \
+            git -C "$d" gc --aggressive --prune=now 2>/dev/null || true; \
+        fi; \
+    done; \
+    echo "size after trim:"; du -sh /opt/hermes-agent-code /opt/hermes-agent /opt/hermes-webui
 
 
 # ─── Stage 2 — runtime (minimal) ────────────────────────────────────────────
@@ -180,19 +181,22 @@ COPY --from=builder /opt/hermes-webui         /opt/hermes-webui
 COPY --from=builder /opt/hermes-agent         /opt/hermes-agent
 COPY --from=builder /opt/hermes-agent-code    /opt/hermes-agent-code
 
-# Create system-wide `hermes` wrapper invoking the pre-baked venv python.
-# Done in RUNTIME stage so the symlink survives stage transition. Best-effort:
-# if pre-bake failed, skip — run.sh handles the runtime-install fallback.
-RUN if [ -f /opt/hermes-agent/.venv-path ]; then \
-        AGENT_VENV="$(cat /opt/hermes-agent/.venv-path)"; \
-        AGENT_DIR="$(dirname "$AGENT_VENV")"; \
-        printf '#!/bin/bash\nexec %s/bin/python %s/hermes "$@"\n' \
-            "$AGENT_VENV" "$AGENT_DIR" > /usr/local/bin/hermes; \
-        chmod +x /usr/local/bin/hermes; \
-        echo ">> /usr/local/bin/hermes wired to $AGENT_VENV"; \
-    else \
-        echo ">> No .venv-path — hermes CLI will be installed on first run"; \
-    fi
+# `hermes` dispatcher — prefers the user-writable mirror at /data
+# (where updates persist), falls back to the pre-baked image copy at /opt
+# during first boot before run.sh has mirrored.
+RUN printf '%s\n' \
+    '#!/bin/bash' \
+    '# Prefer mirrored install at /data (persists across rebuilds);' \
+    '# fall back to baked-in image copy on first boot.' \
+    'if [ -x /data/hermes/agent-code/venv/bin/python ]; then' \
+    '    exec /data/hermes/agent-code/venv/bin/python /data/hermes/agent-code/hermes "$@"' \
+    'elif [ -x /opt/hermes-agent-code/venv/bin/python ]; then' \
+    '    exec /opt/hermes-agent-code/venv/bin/python /opt/hermes-agent-code/hermes "$@"' \
+    'else' \
+    '    echo "hermes: agent not installed" >&2; exit 127' \
+    'fi' \
+    > /usr/local/bin/hermes \
+    && chmod +x /usr/local/bin/hermes
 
 # Add-on entrypoint
 COPY run.sh /run.sh

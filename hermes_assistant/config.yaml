@@ -1,5 +1,5 @@
 name: Hermes Assistant
-version: "1.0.0"
+version: "1.1.0"
 slug: hermes_assistant
 description: Hermes AI Agent (NousResearch) with Web UI and setup terminal for Home Assistant
 url: https://github.com/nuttaruj/hermes-homeassistant
@@ -32,12 +32,17 @@ map:
   - addon_config:rw
   - share:rw
 
-# Skip regenerable artifacts from HA backups (~300-500MB saved).
+# Skip regenerable artifacts from HA backups (~400-600MB saved).
+# Agent + webui code mirror lives in /data so updates persist, but the
+# venv directories can be rebuilt from the image seed if lost.
 backup_exclude:
-  - "hermes/venv/*"
+  - "hermes/agent-code/venv/*"
+  - "hermes/agent-code/node_modules/*"
+  - "hermes/agent-code/.uv-cache/*"
+  - "hermes/webui-app/.venv/*"
+  - "hermes/webui-app/__pycache__/*"
   - "hermes/webui/cache/*"
   - "hermes/.cache/*"
-  - "hermes-agent/venv/*"
 
 # Terminal port published to LAN; webui served only via Ingress.
 ports:
@@ -53,6 +58,16 @@ options:
   # ── COMMON ──────────────────────────────────────────────────────────────
   timezone: "Asia/Bangkok"
   enable_terminal: true
+
+  # ── UPGRADES ────────────────────────────────────────────────────────────
+  # When true, run `hermes update` on every container start. Picks up
+  # upstream Hermes agent releases without bumping the add-on version.
+  # Adds ~30s to boot when an update is available.
+  auto_update_agent: false
+
+  # When true, `git pull` hermes-webui on every container start.
+  # Pinned to the same branch the image was built from.
+  auto_update_webui: false
 
   # ── OPTIONAL ────────────────────────────────────────────────────────────
   # Override the auto-injected SUPERVISOR_TOKEN with your own Long-Lived
@@ -71,6 +86,8 @@ schema:
   terminal_password: password
   timezone: str
   enable_terminal: bool
+  auto_update_agent: bool
+  auto_update_webui: bool
   homeassistant_token: password?
   anthropic_api_key: password?
   watch_entities:

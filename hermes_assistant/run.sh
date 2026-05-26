@@ -1,11 +1,13 @@
 #!/usr/bin/with-contenv bashio
 # Hermes Assistant — Home Assistant add-on entrypoint
+#
+# Lifecycle:
 #   1. Validate options
 #   2. Resolve HA token (SUPERVISOR_TOKEN auto-fallback)
 #   3. Write secrets to /data/hermes/.env (mode 600)
-#   4. Materialise initial Hermes config.yaml
-#   5. Mirror pre-baked agent into /data/hermes on first run (so it persists
-#      and is user-editable via the terminal)
+#   4. First-boot: mirror agent + webui from image seed (/opt) to /data,
+#      fixing venv shebangs so binaries work from the new path
+#   5. Optional: auto-update agent (`hermes update`) and/or webui (`git pull`)
 #   6. Start ttyd in background — gated on bootstrap completion
 #   7. Exec hermes-webui in foreground (bound 127.0.0.1:8787 → Ingress)
 set -e
@@ -13,12 +15,19 @@ set -e
 WEBUI_PORT=8787
 TERMINAL_PORT=7681
 
+AGENT_DST=/data/hermes/agent-code
+AGENT_SRC=/opt/hermes-agent-code
+WEBUI_DST=/data/hermes/webui-app
+WEBUI_SRC=/opt/hermes-webui
+
 # ─── Read options ───────────────────────────────────────────────────────────
 WEBUI_PASSWORD=$(bashio::config 'webui_password')
 TERMINAL_PASSWORD=$(bashio::config 'terminal_password')
 HA_TOKEN_USER=$(bashio::config 'homeassistant_token')
 TZNAME=$(bashio::config 'timezone')
 ENABLE_TERMINAL=$(bashio::config 'enable_terminal')
+AUTO_UPDATE_AGENT=$(bashio::config 'auto_update_agent')
+AUTO_UPDATE_WEBUI=$(bashio::config 'auto_update_webui')
 ANTHROPIC_API_KEY=$(bashio::config 'anthropic_api_key')
 
 # ─── Validate required ──────────────────────────────────────────────────────
@@ -32,10 +41,6 @@ if bashio::var.true "${ENABLE_TERMINAL}" && [ -z "${TERMINAL_PASSWORD}" ]; then
 fi
 
 # ─── Resolve HA token: user option > SUPERVISOR_TOKEN ───────────────────────
-# homeassistant_api: true in config.yaml causes Supervisor to inject
-# SUPERVISOR_TOKEN into the container env and route http://supervisor/core
-# to the HA Core API. This means the user does NOT need to create a
-# Long-Lived Access Token — the supervisor proxy handles auth.
 if [ -n "${HA_TOKEN_USER}" ]; then
     HA_TOKEN="${HA_TOKEN_USER}"
     HASS_URL="http://homeassistant.local:8123"
@@ -47,7 +52,7 @@ elif [ -n "${SUPERVISOR_TOKEN:-}" ]; then
 else
     HA_TOKEN=""
     HASS_URL=""
-    bashio::log.warning "No HA token available — HA integration will be disabled"
+    bashio::log.warning "No HA token available — HA integration disabled"
 fi
 
 # ─── Timezone ────────────────────────────────────────────────────────────────
@@ -70,10 +75,7 @@ fi
 if [ -n "${ANTHROPIC_API_KEY}" ]; then
     echo "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}" >> "${ENV_FILE}"
 fi
-
-# Optional Claude OAuth credentials from /config
 if [ -f "/config/claude_credentials.json" ]; then
-    bashio::log.info "Loading Claude OAuth credentials from /config/claude_credentials.json"
     OAUTH_TOKEN=$(python3 -c "
 import json, sys
 try:
@@ -85,13 +87,11 @@ except Exception:
     if [ -n "${OAUTH_TOKEN}" ]; then
         echo "CLAUDE_CODE_OAUTH_TOKEN=${OAUTH_TOKEN}" >> "${ENV_FILE}"
         bashio::log.info "Claude OAuth token loaded"
-    else
-        bashio::log.warning "claude_credentials.json present but no accessToken extracted"
     fi
 fi
 chmod 600 "${ENV_FILE}"
 
-# ─── Hermes config.yaml (created once, user-editable via WebUI) ─────────────
+# ─── Hermes config.yaml (created once, preserved across updates) ────────────
 HERMES_CONFIG=/data/hermes/config.yaml
 if [ ! -f "${HERMES_CONFIG}" ]; then
     bashio::log.info "Creating initial Hermes config.yaml"
@@ -110,43 +110,70 @@ if [ ! -f "${HERMES_CONFIG}" ]; then
     } > "${HERMES_CONFIG}"
 fi
 
-# ─── First-run: mirror pre-baked agent into /data/hermes ────────────────────
-# /opt/hermes-agent ships in the image (pre-baked at build time). On first
-# start we copy the venv + state into /data/hermes so it persists across
-# container rebuilds and the user can edit /data/hermes/config.yaml.
+# ─── Mirror image seed to /data (first boot only) ───────────────────────────
+# Why: /opt/* is image-immutable. To let `hermes update` / `git pull` persist,
+# we mirror once into /data and run from there. Subsequent rebuilds (after
+# bumping the add-on) DO NOT overwrite /data — user keeps their version.
 BOOTSTRAP_LOCK=/data/hermes/.bootstrap-lock
-BOOTSTRAP_DONE=/data/hermes/.bootstrap-done
 
-if [ ! -f "${BOOTSTRAP_DONE}" ]; then
-    touch "${BOOTSTRAP_LOCK}"
-    if [ -d /opt/hermes-agent/venv ]; then
-        bashio::log.info "First run — mirroring pre-baked Hermes agent into /data/hermes"
-        # rsync would be ideal but we don't ship it; cp -a preserves modes
-        if [ ! -d /data/hermes/venv ]; then
-            cp -a /opt/hermes-agent/venv /data/hermes/venv
+mirror_with_shebang_fix() {
+    local src=$1 dst=$2
+    bashio::log.info "Mirroring ${src} → ${dst} (this may take ~30s on slow storage)"
+    cp -a "${src}" "${dst}"
+    # Rewrite uv-generated absolute-path shebangs in venv binaries so they
+    # resolve under the new location. python/python3/python3.X symlinks point
+    # at /usr/bin/python3.X (system) and don't need touching.
+    for venv_bin in "${dst}/venv/bin" "${dst}/.venv/bin"; do
+        if [ -d "${venv_bin}" ]; then
+            find "${venv_bin}" -type f -exec sed -i \
+                "s|${src}|${dst}|g" {} \; 2>/dev/null || true
         fi
-        # Copy any agent-side default config files
-        for f in /opt/hermes-agent/*.yaml /opt/hermes-agent/*.toml; do
-            [ -f "$f" ] && cp -n "$f" /data/hermes/ || true
-        done
-        bashio::log.info "Agent mirrored"
-    else
-        bashio::log.warning "Pre-bake missing — bootstrap.py will install on first webui start (5-10 min)"
-    fi
-    touch "${BOOTSTRAP_DONE}"
-    rm -f "${BOOTSTRAP_LOCK}"
+    done
+    bashio::log.info "Mirror of $(basename ${dst}) complete ($(du -sh ${dst} | cut -f1))"
+}
+
+touch "${BOOTSTRAP_LOCK}"
+if [ ! -d "${AGENT_DST}" ] && [ -d "${AGENT_SRC}" ]; then
+    mirror_with_shebang_fix "${AGENT_SRC}" "${AGENT_DST}"
+fi
+if [ ! -d "${WEBUI_DST}" ] && [ -d "${WEBUI_SRC}" ]; then
+    mirror_with_shebang_fix "${WEBUI_SRC}" "${WEBUI_DST}"
+fi
+rm -f "${BOOTSTRAP_LOCK}"
+
+# Determine effective install dirs (mirror if present, else image seed)
+[ -d "${AGENT_DST}/venv" ] && AGENT_DIR="${AGENT_DST}" || AGENT_DIR="${AGENT_SRC}"
+[ -d "${WEBUI_DST}/.venv" ] && WEBUI_DIR="${WEBUI_DST}" || WEBUI_DIR="${WEBUI_SRC}"
+bashio::log.info "Agent dir: ${AGENT_DIR}"
+bashio::log.info "WebUI dir: ${WEBUI_DIR}"
+
+# ─── Optional auto-updates ──────────────────────────────────────────────────
+if bashio::var.true "${AUTO_UPDATE_AGENT}" && [ -d "${AGENT_DST}/.git" ]; then
+    bashio::log.info "auto_update_agent=true — running hermes update"
+    HERMES_HOME=/data/hermes /usr/local/bin/hermes update 2>&1 \
+        | sed 's/^/  [hermes update] /' || \
+        bashio::log.warning "hermes update failed — continuing with current version"
+fi
+
+if bashio::var.true "${AUTO_UPDATE_WEBUI}" && [ -d "${WEBUI_DST}/.git" ]; then
+    bashio::log.info "auto_update_webui=true — git pull hermes-webui"
+    (cd "${WEBUI_DST}" && git pull --ff-only 2>&1 | sed 's/^/  [webui pull] /') || \
+        bashio::log.warning "webui git pull failed — continuing with current version"
 fi
 
 # ─── Export envs for hermes-webui ───────────────────────────────────────────
 export HERMES_HOME=/data/hermes
+export HERMES_INSTALL_DIR="${AGENT_DIR}"
+export HERMES_WEBUI_AGENT_DIR="${AGENT_DIR}"
 export HERMES_WEBUI_STATE_DIR=/data/hermes/webui
 export HERMES_WEBUI_HOST=127.0.0.1
 export HERMES_WEBUI_PORT="${WEBUI_PORT}"
 export HERMES_WEBUI_PASSWORD="${WEBUI_PASSWORD}"
+export HERMES_WEBUI_PYTHON="${WEBUI_DIR}/.venv/bin/python"
 export HERMES_CONFIG_PATH=/data/hermes/config.yaml
 export HERMES_WEBUI_PRESERVE_ENV=1
 
-# ─── ttyd (background, gated on bootstrap) ──────────────────────────────────
+# ─── ttyd (background) ──────────────────────────────────────────────────────
 if bashio::var.true "${ENABLE_TERMINAL}"; then
     bashio::log.info "Starting setup terminal on port ${TERMINAL_PORT}"
     /usr/local/bin/ttyd \
@@ -156,19 +183,22 @@ if bashio::var.true "${ENABLE_TERMINAL}"; then
         --writable \
         --check-origin \
         bash -l -c "
-            # Wait for bootstrap to finish so user shells start in a sane state
             while [ -f ${BOOTSTRAP_LOCK} ]; do
                 echo 'Waiting for Hermes bootstrap…'; sleep 2;
             done
             export HERMES_HOME=/data/hermes
-            export PATH=\"\${HERMES_HOME}/venv/bin:/opt/hermes-webui/.venv/bin:\${PATH}\"
+            export HERMES_INSTALL_DIR=${AGENT_DIR}
+            export PATH=\"${AGENT_DIR}/venv/bin:${WEBUI_DIR}/.venv/bin:/usr/local/bin:\${PATH}\"
             cd \${HERMES_HOME}
             echo ''
             echo '=================================================='
             echo '  Hermes Setup Terminal'
-            echo '  Run:  hermes setup     (configure LLM provider)'
-            echo '        hermes status    (verify install)'
-            echo '        hermes --help'
+            echo '  Agent: ${AGENT_DIR}'
+            echo ''
+            echo '  hermes setup      configure LLM provider (one-time)'
+            echo '  hermes status     verify install'
+            echo '  hermes update     pull latest agent (persists in /data)'
+            echo '  hermes --help     all commands'
             echo '=================================================='
             exec bash
         " \
@@ -178,5 +208,5 @@ fi
 
 # ─── Start hermes-webui (foreground) ────────────────────────────────────────
 bashio::log.info "Starting Hermes Web UI on 127.0.0.1:${WEBUI_PORT} (HA Ingress)"
-cd /opt/hermes-webui
-exec "${HERMES_WEBUI_PYTHON}" /opt/hermes-webui/bootstrap.py --no-browser
+cd "${WEBUI_DIR}"
+exec "${HERMES_WEBUI_PYTHON}" "${WEBUI_DIR}/bootstrap.py" --no-browser

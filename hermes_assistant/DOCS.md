@@ -6,8 +6,14 @@ Assistant. Includes a setup terminal (ttyd) so you can run `hermes setup` and
 authenticate any supported LLM provider (Anthropic, OpenAI, OAuth flows, …)
 directly from the browser.
 
-The Hermes agent is **pre-baked into the image** — first start is fast, no
-multi-minute download.
+The Hermes agent and Web UI are **pre-baked into the image** and **mirrored
+to `/data` on first boot**. This means:
+
+- First start is fast — no 5–10 min agent download.
+- Updates pulled via `hermes update` (in the setup terminal) or
+  `auto_update_agent: true` **persist across add-on restarts and rebuilds**.
+- Bumping the add-on version is not required to follow Hermes upstream
+  releases.
 
 ---
 
@@ -43,6 +49,8 @@ the add-on uses the Supervisor proxy automatically (via `homeassistant_api`).
 | `terminal_password` | when terminal on | Basic-auth password for ttyd |
 | `timezone` | yes | IANA TZ, e.g. `Asia/Bangkok` |
 | `enable_terminal` | yes | `true` to expose setup terminal on port 7681 |
+| `auto_update_agent` | no | `true` → run `hermes update` every container start |
+| `auto_update_webui` | no | `true` → `git pull` Web UI every container start |
 | `homeassistant_token` | no | Override the auto SUPERVISOR_TOKEN with your own LLA |
 | `anthropic_api_key` | no | Bake into `.env`. Skip if configuring via terminal |
 | `watch_entities` | no | List of entity IDs Hermes should watch |
@@ -56,12 +64,19 @@ The setup terminal is always served on port `7681` (LAN, port-mapped).
 
 | Path | Purpose | Persists | In backup |
 |---|---|---|---|
-| `/data/hermes/` | All Hermes state | yes | yes |
-| `/data/hermes/.env` | Credentials. Rewritten every start from options (mode 600) | yes | yes |
+| `/data/hermes/` | All Hermes state — configs, sessions, memories | yes | yes |
+| `/data/hermes/.env` | Credentials. Rewritten every start (mode 600) | yes | yes |
 | `/data/hermes/config.yaml` | Hermes platform config (kept after first create) | yes | yes |
-| `/data/hermes/venv/` | Hermes agent venv (~300MB) | yes | **no** (excluded) |
-| `/data/hermes/webui/` | WebUI sessions and workspace state | yes | yes |
+| `/data/hermes/agent-code/` | Hermes agent install (mirrored from image on first boot, updated in place by `hermes update`) | yes | partial |
+| `/data/hermes/agent-code/venv/` | Agent Python venv (~260MB, regenerable) | yes | **no** (excluded) |
+| `/data/hermes/webui-app/` | Web UI install (mirrored on first boot, `git pull`-able) | yes | partial |
+| `/data/hermes/webui-app/.venv/` | Web UI Python venv | yes | **no** (excluded) |
+| `/data/hermes/webui/` | Web UI sessions and workspace state | yes | yes |
 | `/config/claude_credentials.json` | Optional Claude OAuth dump | yes | yes |
+
+The `/opt/hermes-agent-code/` and `/opt/hermes-webui/` directories baked
+into the image are used **only on first boot** as the seed for the mirror.
+After that, the `/data` copies are the source of truth.
 
 ---
 
@@ -101,11 +116,25 @@ OAuth tokens expire — refresh this file when needed, or use
 
 ## Updating
 
-- **WebUI / agent**: bump add-on version, rebuild. The add-on pins
-  `HERMES_WEBUI_REF` and `HERMES_AGENT_REF` in the Dockerfile build args.
-- **Force agent reinstall**: SSH into the container or use the setup
-  terminal, run `rm -rf /data/hermes/venv && rm /data/hermes/.bootstrap-done`,
-  then restart. The next start mirrors a fresh agent from the image.
+Three update paths, in order from least to most intervention:
+
+1. **Hermes agent / Web UI follows upstream** (recommended day-to-day)
+   - Open the setup terminal, run `hermes update`
+   - Or enable `auto_update_agent: true` / `auto_update_webui: true` —
+     updates run on every container start
+   - Persists in `/data` across add-on restarts; bumping the add-on
+     version is NOT required
+2. **Add-on itself** (manifest, Dockerfile, base image)
+   - The repo owner bumps `version:` in `config.yaml` and pushes to
+     GitHub. HA Supervisor shows the update; users click "Update"
+     (or enable HA's per-add-on auto-update toggle)
+3. **Force agent reinstall from image seed**
+   - Setup terminal:
+     ```
+     rm -rf /data/hermes/agent-code
+     ```
+   - Restart the add-on. First boot re-mirrors the baked-in seed
+     (resets to the version that shipped with the current image).
 
 ---
 
