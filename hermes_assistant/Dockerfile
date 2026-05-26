@@ -68,9 +68,9 @@ RUN git clone --depth=1 --branch "${HERMES_WEBUI_REF}" \
 
 # Pre-create the webui venv with deps. Heavy hermes-agent install happens
 # on first run via run.sh (cached into /data/hermes which persists).
+# `uv venv` doesn't ship pip; use `uv pip install --python <venv>` instead.
 RUN uv venv /opt/hermes-webui/.venv --python python3 \
-    && /opt/hermes-webui/.venv/bin/python -m pip install --upgrade pip \
-    && /opt/hermes-webui/.venv/bin/python -m pip install --no-cache-dir \
+    && uv pip install --python /opt/hermes-webui/.venv/bin/python \
          -r /opt/hermes-webui/requirements.txt
 
 ENV HERMES_WEBUI_PYTHON=/opt/hermes-webui/.venv/bin/python
