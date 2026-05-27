@@ -71,7 +71,6 @@ the add-on uses the Supervisor proxy automatically (via `homeassistant_api`).
 
 | Option | Required | Description |
 |---|---|---|
-| `terminal_password` | when terminal on | Basic-auth password for ttyd |
 | `timezone` | yes | IANA TZ, e.g. `Asia/Bangkok` |
 | `enable_terminal` | yes | `true` to expose setup terminal on port 7681 |
 | `auto_update_agent` | no | `true` → run `hermes update` every container start |

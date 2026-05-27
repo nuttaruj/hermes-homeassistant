@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.6.1 — 2026-05-27
+
+- **Dropped ttyd basic-auth + `terminal_password` option entirely**.
+  The terminal binds 127.0.0.1 inside the container and is reachable
+  only through HA Ingress, which is itself gated by HA login +
+  `panel_admin: true`. Anyone who can open the panel is already a
+  verified HA admin; the extra password prompt added zero security
+  and a real UX speed bump. Setup Terminal button now drops the user
+  straight into a shell.
+
 ## 1.6.0 — 2026-05-27
 
 - **Removed pre-installed Claude Code CLI** from the image. Baking

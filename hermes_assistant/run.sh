@@ -22,7 +22,6 @@ WEBUI_DST=/data/hermes/webui-app
 WEBUI_SRC=/opt/hermes-webui
 
 # ─── Read options ───────────────────────────────────────────────────────────
-TERMINAL_PASSWORD=$(bashio::config 'terminal_password')
 HA_TOKEN_USER=$(bashio::config 'homeassistant_token')
 TZNAME=$(bashio::config 'timezone')
 ENABLE_TERMINAL=$(bashio::config 'enable_terminal')
@@ -212,24 +211,17 @@ bashio::log.info "webui PID=${WEBUI_PID}"
 
 # ─── Start ttyd (background, loopback only — nginx fronts it) ───────────────
 if bashio::var.true "${ENABLE_TERMINAL}"; then
-    # --base-path /terminal/ so ttyd generates HTML with that prefix
-    # (nginx sub_filter then rewrites to include the Ingress prefix).
-    # No --credential here: HA Ingress is the only auth boundary and the
-    # panel is already restricted by panel_admin: true.
-    TTYD_ARGS=(
-        --port "${TERMINAL_PORT}"
-        --interface 127.0.0.1
-        --base-path /terminal
-        --writable
-    )
-    # Keep optional ttyd basic-auth as defense-in-depth for users who
-    # configure terminal_password.
-    if [ -n "${TERMINAL_PASSWORD}" ]; then
-        TTYD_ARGS+=( --credential "hermes:${TERMINAL_PASSWORD}" )
-        bashio::log.info "ttyd: basic-auth enabled (user=hermes)"
-    fi
-    bashio::log.info "Starting ttyd bg on 127.0.0.1:${TERMINAL_PORT} (/terminal/)"
-    /usr/local/bin/ttyd "${TTYD_ARGS[@]}" \
+    # No --credential: ttyd binds 127.0.0.1 and is reachable only through
+    # HA Ingress (panel_admin: true). The HA admin who can open the panel
+    # is already trusted; a second password prompt would just slow them
+    # down to no security benefit.
+    bashio::log.info "Starting ttyd bg on 127.0.0.1:${TERMINAL_PORT} (/terminal/, no auth — HA Ingress gates access)"
+    /usr/local/bin/ttyd \
+        --port "${TERMINAL_PORT}" \
+        --interface 127.0.0.1 \
+        --base-path /terminal \
+        --writable \
+        --check-origin \
         bash -l -c "
             while [ -f ${BOOTSTRAP_LOCK} ]; do
                 echo 'Waiting for Hermes bootstrap…'; sleep 2;

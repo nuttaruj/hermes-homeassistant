@@ -1,5 +1,5 @@
 name: Hermes Assistant
-version: "1.6.0"
+version: "1.6.1"
 slug: hermes_assistant
 description: Hermes AI Agent (NousResearch) with Web UI and setup terminal for Home Assistant
 url: https://github.com/nuttaruj/hermes-homeassistant
@@ -56,11 +56,6 @@ backup_exclude:
 # panel at <ingress_url>/terminal/.
 
 options:
-  # Terminal basic-auth (optional). HA Ingress + panel_admin: true is the
-  # primary auth; setting this adds a second factor in case the container
-  # ever gets reached outside Ingress.
-  terminal_password: ""
-
   # ── COMMON ──────────────────────────────────────────────────────────────
   timezone: "Asia/Bangkok"
   enable_terminal: true
@@ -91,7 +86,6 @@ options:
   watch_entities: []
 
 schema:
-  terminal_password: password?
   timezone: str
   enable_terminal: bool
   auto_update_agent: bool
