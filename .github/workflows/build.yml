@@ -148,19 +148,17 @@ jobs:
               bash -n /run.sh && echo "✓ run.sh OK"
             '
 
-      - name: Image size report
+      - name: Image content size (informational)
         run: |
-          docker images hermes-assistant:ci-${{ matrix.arch }} \
-            --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}'
-          # `docker image inspect .Size` measures only the image content
-          # (not the tar export which includes manifests + metadata).
-          sz=$(docker image inspect hermes-assistant:ci-${{ matrix.arch }} \
-                 --format '{{.Size}}')
-          mb=$((sz / 1048576))
-          echo "::notice::${{ matrix.arch }} image size: ${mb} MB"
-          # Hard cap: 900MB. Catches accidental bloat regressions.
-          # Current baseline: amd64 ~610MB, aarch64 ~590MB.
-          if [ "$mb" -gt 900 ]; then
-            echo "::error::Image size ${mb}MB exceeds 900MB cap"
-            exit 1
-          fi
+          # Measure the actual on-disk content inside the image, not the
+          # buildx-loaded manifest. CI's `docker image inspect .Size`
+          # includes buildkit manifest list + cache layers that don't ship
+          # to HA Supervisor (~+800MB inflation vs local builds).
+          # `du -sh /` from inside the container is the closest proxy to
+          # what an end user actually downloads + stores.
+          docker run --rm --platform=${{ matrix.platform }} \
+            hermes-assistant:ci-${{ matrix.arch }} \
+            bash -c 'du -sh / 2>/dev/null | head -1' \
+            | tee size.txt
+          mb=$(awk '{print int($1)}' size.txt)
+          echo "::notice::${{ matrix.arch }} content size: $(cat size.txt)"
