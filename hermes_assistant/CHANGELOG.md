@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.6.4 — 2026-05-27
+
+- Terminal welcome message simplified: leads with `hermes setup` as
+  the single, platform-neutral entry point. No provider-specific
+  CLI helpers, no Mac-bridge workaround — those favoured one OS and
+  cluttered the message.
+- DOCS: removed the "Claude Max users — OAuth credentials" Mac-bridge
+  section. The bridge code path in run.sh is kept (it's harmless when
+  the file isn't present) but is no longer documented as a primary
+  workflow.
+
 ## 1.6.3 — 2026-05-27
 
 - **Claude Max bridge**: when `/config/claude_credentials.json` is

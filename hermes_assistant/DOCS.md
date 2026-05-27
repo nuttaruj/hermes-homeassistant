@@ -29,7 +29,16 @@ to `/data` on first boot**. This means:
    gold "Setup Terminal" button at the bottom-right of the Web UI
    panel, or directly at `<ingress_url>/terminal/`.
 
-### Primary commands
+### Setup
+
+Run `hermes setup` in the terminal. It is the universal entry point
+for every supported provider (Anthropic, OpenAI, Google Gemini,
+OpenRouter, GitHub Copilot, local models, and others) and works on
+any platform Home Assistant runs on. Pick the provider, paste an
+API key when prompted (or follow the OAuth device-code flow if the
+provider supports it), and `hermes setup` writes credentials to
+`/data/hermes/.env` where they persist across add-on restarts and
+image rebuilds.
 
 | Command | Purpose |
 |---|---|
@@ -37,26 +46,6 @@ to `/data` on first boot**. This means:
 | `hermes model` | Pick / switch provider + model |
 | `hermes update` | Pull the latest agent release |
 | `hermes --help` | Full command list |
-
-### Provider CLI helpers (optional)
-
-These are convenience commands for using a provider's own CLI auth
-flow before pointing Hermes at it. The bundled Node.js install gives
-`npx` out of the box, so nothing needs to be installed globally.
-
-| Provider | Command |
-|---|---|
-| OpenAI Codex / GPT | `npx -y @openai/codex login` |
-| Google Gemini | `npx -y @google/gemini-cli auth` |
-| GitHub Copilot | `gh auth login && gh extension install github/gh-copilot` |
-| Aider (multi-provider pair programmer) | `pip install --user aider-chat` |
-| Ollama (local models) | `curl -fsSL https://ollama.com/install.sh \| sh` |
-
-For most users, `hermes setup` alone is enough — it talks to all
-of the above providers directly via API key or OAuth device code.
-
-Credentials are saved under `/data/hermes/.env` and persist across
-add-on restarts and image rebuilds.
 
 ### Adding the terminal as a HA sidebar tab (optional)
 
@@ -123,32 +112,6 @@ After that, the `/data` copies are the source of truth.
 
 ---
 
-## Claude Max users — OAuth credentials
-
-Running `claude login` inside the addon's terminal **will not work** —
-Claude Code v2.x stores OAuth tokens in the system keychain
-(macOS Keychain / Linux libsecret), and the addon container has neither.
-The webui's "Login with Claude Code" button has the same limitation.
-
-To reuse a Claude Max subscription, bridge credentials from a machine
-where Claude Code does work (your Mac, your Linux desktop with
-gnome-keyring):
-
-1. On the source machine (with Claude Code logged in):
-   ```
-   cp ~/.claude/.credentials.json ~/claude_credentials.json
-   ```
-2. Copy the file to the addon's config directory at
-   `/addon_configs/<addon_slug>_hermes_assistant/claude_credentials.json`
-   (use the **Samba** or **File Editor** addons in HA, or SSH).
-3. Restart the addon. The log will print
-   `Claude OAuth token loaded from /config` and the file is also mirrored
-   to `~/.claude/.credentials.json` so the webui's
-   "Login with Claude Code" button detects it.
-
-OAuth tokens expire periodically — refresh the file from the source
-machine when that happens, or use a direct Anthropic API key with
-`hermes setup` instead.
 
 ---
 
