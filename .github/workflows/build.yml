@@ -3,6 +3,7 @@ name: Build
 on:
   push:
     branches: [main]
+    tags: ["v*"]
     paths:
       - "hermes_assistant/**"
       - ".github/workflows/build.yml"
@@ -17,6 +18,10 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
 
 jobs:
   lint:
@@ -162,3 +167,72 @@ jobs:
             | tee size.txt
           mb=$(awk '{print int($1)}' size.txt)
           echo "::notice::${{ matrix.arch }} content size: $(cat size.txt)"
+
+  publish:
+    name: Publish ${{ matrix.arch }} → GHCR
+    needs: build
+    # Only publish on push to main or version tags. Never on PRs.
+    if: |
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            base: ghcr.io/home-assistant/amd64-base-debian:bookworm
+            platform: linux/amd64
+          - arch: aarch64
+            base: ghcr.io/home-assistant/aarch64-base-debian:bookworm
+            platform: linux/arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read addon version
+        id: version
+        run: |
+          ver=$(yq eval '.version' hermes_assistant/config.yaml)
+          echo "version=${ver}" >> $GITHUB_OUTPUT
+          echo "Publishing version: ${ver}"
+
+      - name: Set up QEMU
+        if: matrix.arch == 'aarch64'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build + push (${{ matrix.arch }})
+        uses: docker/build-push-action@v6
+        with:
+          context: hermes_assistant
+          platforms: ${{ matrix.platform }}
+          build-args: |
+            BUILD_FROM=${{ matrix.base }}
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/${{ matrix.arch }}-hermes-assistant:${{ steps.version.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/${{ matrix.arch }}-hermes-assistant:latest
+          cache-from: type=gha,scope=publish-${{ matrix.arch }}
+          cache-to: type=gha,scope=publish-${{ matrix.arch }},mode=max
+          provenance: false
+          sbom: false
+
+      - name: Summary
+        run: |
+          echo "### Published ${{ matrix.arch }} → GHCR" >> $GITHUB_STEP_SUMMARY
+          echo "- \`ghcr.io/${{ github.repository_owner }}/${{ matrix.arch }}-hermes-assistant:${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`ghcr.io/${{ github.repository_owner }}/${{ matrix.arch }}-hermes-assistant:latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Note**: First-time publish — set the package to public at:" >> $GITHUB_STEP_SUMMARY
+          echo "https://github.com/users/${{ github.repository_owner }}/packages/container/${{ matrix.arch }}-hermes-assistant/settings" >> $GITHUB_STEP_SUMMARY
