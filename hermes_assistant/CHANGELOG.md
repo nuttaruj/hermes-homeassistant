@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.0 — 2026-05-27
+
+- **Pre-installed `claude` CLI** (`@anthropic-ai/claude-code`) via the
+  bundled Node.js install. `claude setup-token` works in the setup
+  terminal out of the box — no `npx`/`npm install` required.
+- Terminal welcome message lists both Hermes and Claude commands.
+- DOCS: added `panel_iframe` snippet for adding the setup terminal as
+  a sidebar tab in HA (user-side YAML, no addon change).
+
 ## 1.2.2 — 2026-05-27
 
 - **Removed `webui_password` option**. The webui post-login redirect

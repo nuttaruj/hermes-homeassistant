@@ -192,17 +192,21 @@ if bashio::var.true "${ENABLE_TERMINAL}"; then
             done
             export HERMES_HOME=/data/hermes
             export HERMES_INSTALL_DIR=${AGENT_DIR}
-            export PATH=\"${AGENT_DIR}/venv/bin:${WEBUI_DIR}/.venv/bin:/usr/local/bin:\${PATH}\"
+            export PATH=\"${AGENT_DIR}/venv/bin:${WEBUI_DIR}/.venv/bin:/opt/hermes-agent/node/bin:/usr/local/bin:\${PATH}\"
             cd \${HERMES_HOME}
             echo ''
             echo '=================================================='
             echo '  Hermes Setup Terminal'
-            echo '  Agent: ${AGENT_DIR}'
             echo ''
-            echo '  hermes setup      configure LLM provider (one-time)'
-            echo '  hermes status     verify install'
-            echo '  hermes update     pull latest agent (persists in /data)'
-            echo '  hermes --help     all commands'
+            echo '  Hermes:'
+            echo '    hermes setup     configure LLM provider (one-time)'
+            echo '    hermes update    pull latest agent (persists in /data)'
+            echo '    hermes --help    all commands'
+            echo ''
+            echo '  Claude Code (for Claude Max subscription OAuth):'
+            echo '    claude setup-token    paste verifier from claude.ai'
+            echo '    claude --version'
+            echo ''
             echo '=================================================='
             exec bash
         " \

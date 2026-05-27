@@ -27,13 +27,31 @@ to `/data` on first boot**. This means:
 4. Open the **Web UI** from the sidebar (or `Open Web UI` button).
 5. Open the **Setup Terminal** at `http://HOMEASSISTANT_IP:7681`
    (user `hermes`, password = `terminal_password`).
-   In the terminal run:
-   ```
-   hermes setup
-   ```
-   Follow the prompts to authenticate your LLM provider (Anthropic API key,
-   Claude OAuth, OpenAI, etc.). Credentials are saved under `/data/hermes/`
-   and persist across add-on restarts.
+   In the terminal you can run:
+   - `claude setup-token` — Claude Max subscription OAuth (no API charges)
+   - `hermes setup` — Hermes' own provider selector (Anthropic, OpenAI, …)
+   - `hermes --help` / `claude --help`
+
+   Credentials are saved under `/data/hermes/` and persist across
+   add-on restarts.
+
+### Adding the terminal as a HA sidebar tab (optional)
+
+If you don't want to remember the LAN URL, add this to your HA
+`configuration.yaml` (replace the IP):
+
+```yaml
+panel_iframe:
+  hermes_terminal:
+    title: "Hermes Terminal"
+    icon: mdi:console
+    url: "http://192.168.1.10:7681"
+    require_admin: true
+```
+
+Restart HA — a "Hermes Terminal" entry appears in the sidebar next to
+the existing Hermes Agent panel. Both run inside the same add-on
+container; the terminal is the only thing on the LAN port.
 
 You do **not** need to create a Home Assistant Long-Lived Access Token —
 the add-on uses the Supervisor proxy automatically (via `homeassistant_api`).
