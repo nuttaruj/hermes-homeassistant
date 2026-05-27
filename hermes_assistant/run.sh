@@ -161,6 +161,12 @@ mirror_with_shebang_fix() {
                 "s|${src}|${dst}|g" {} \; 2>/dev/null || true
         fi
     done
+    # Reset working tree so webui's in-app "Update" banner
+    # (git stash → pull → stash pop) starts from a clean slate.
+    if [ -d "${dst}/.git" ]; then
+        git -C "${dst}" reset --hard HEAD --quiet 2>/dev/null || true
+        git -C "${dst}" clean -fd --quiet 2>/dev/null || true
+    fi
     bashio::log.info "Mirror of $(basename ${dst}) complete ($(du -sh ${dst} | cut -f1))"
 }
 
