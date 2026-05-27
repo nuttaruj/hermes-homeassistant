@@ -28,21 +28,36 @@ to `/data` on first boot**. This means:
 5. Open the **Setup Terminal** — either through the floating
    gold "Setup Terminal" button at the bottom-right of the Web UI
    panel, or directly at `<ingress_url>/terminal/`.
-   In the terminal you can run:
-   - `hermes setup` — interactive wizard for any supported LLM
-     provider (Anthropic, OpenAI, Google, local models, …)
-   - `hermes model` — pick / switch provider + model
-   - `hermes update` — pull the latest agent release
-   - `hermes --help` — full command list
 
-   For Claude Max subscription OAuth (optional, bypasses paid API):
-   ```
-   npx -y @anthropic-ai/claude-code setup-token
-   ```
-   The bundled Node.js install provides `npx` automatically.
+### Primary commands
 
-   Credentials are saved under `/data/hermes/` and persist across
-   add-on restarts.
+| Command | Purpose |
+|---|---|
+| `hermes setup` | Interactive wizard for any supported LLM provider |
+| `hermes model` | Pick / switch provider + model |
+| `hermes update` | Pull the latest agent release |
+| `hermes --help` | Full command list |
+
+### Provider CLI helpers (optional)
+
+These are convenience commands for using a provider's own CLI auth
+flow before pointing Hermes at it. The bundled Node.js install gives
+`npx` out of the box, so nothing needs to be installed globally.
+
+| Provider | Command |
+|---|---|
+| Anthropic Claude (Claude Max OAuth) | `npx -y @anthropic-ai/claude-code` |
+| OpenAI Codex / GPT | `npx -y @openai/codex login` |
+| Google Gemini | `npx -y @google/gemini-cli auth` |
+| GitHub Copilot | `gh auth login && gh extension install github/gh-copilot` |
+| Aider (multi-provider pair programmer) | `pip install --user aider-chat` |
+| Ollama (local models) | `curl -fsSL https://ollama.com/install.sh \| sh` |
+
+For most users, `hermes setup` alone is enough — it talks to all
+of the above providers directly via API key or OAuth device code.
+
+Credentials are saved under `/data/hermes/.env` and persist across
+add-on restarts and image rebuilds.
 
 ### Adding the terminal as a HA sidebar tab (optional)
 

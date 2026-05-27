@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.6.2 — 2026-05-27
+
+- Terminal welcome message + DOCS now list provider CLI helpers
+  for the major options Hermes' setup wizard already supports:
+  - Anthropic Claude Code (`npx -y @anthropic-ai/claude-code`)
+  - OpenAI Codex (`npx -y @openai/codex login`)
+  - Google Gemini (`npx -y @google/gemini-cli auth`)
+  - GitHub Copilot (`gh extension install github/gh-copilot`)
+  - Aider (`pip install --user aider-chat`)
+  - Ollama (`curl https://ollama.com/install.sh | sh`)
+  Nothing is pre-installed — `npx` from the bundled Node.js bin
+  fetches whatever the user picks on demand.
+
 ## 1.6.1 — 2026-05-27
 
 - **Dropped ttyd basic-auth + `terminal_password` option entirely**.
