@@ -190,14 +190,21 @@ export HERMES_HOME=/data/hermes
 export HERMES_INSTALL_DIR="${AGENT_DIR}"
 export HERMES_WEBUI_AGENT_DIR="${AGENT_DIR}"
 export HERMES_WEBUI_STATE_DIR=/data/hermes/webui
-export HERMES_WEBUI_HOST=127.0.0.1
+# Bind 0.0.0.0 inside the container. webui prints/embeds "$HOST:$PORT" in
+# the served HTML; with HOST=127.0.0.1 the browser would try to reach
+# the webui's own loopback (which only exists inside the container) and
+# get "refused to connect". 0.0.0.0 in those self-references causes the
+# webui to fall back to window.location, which works through Ingress.
+# nginx still proxies to 127.0.0.1:${WEBUI_PORT} because 0.0.0.0 bind
+# accepts loopback connections.
+export HERMES_WEBUI_HOST=0.0.0.0
 export HERMES_WEBUI_PORT="${WEBUI_PORT}"
 export HERMES_WEBUI_PYTHON="${WEBUI_DIR}/.venv/bin/python"
 export HERMES_CONFIG_PATH=/data/hermes/config.yaml
 export HERMES_WEBUI_PRESERVE_ENV=1
 
 # ─── Start webui (background, loopback only — nginx fronts it) ──────────────
-bashio::log.info "Starting Hermes Web UI bg on 127.0.0.1:${WEBUI_PORT}"
+bashio::log.info "Starting Hermes Web UI bg on 0.0.0.0:${WEBUI_PORT} (nginx fronts via loopback)"
 cd "${WEBUI_DIR}"
 "${HERMES_WEBUI_PYTHON}" "${WEBUI_DIR}/server.py" &
 WEBUI_PID=$!

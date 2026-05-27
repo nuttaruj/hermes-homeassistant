@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.5.3 — 2026-05-27
+
+- **Hotfix**: webui rendered "127.0.0.1:8788" in its HTML
+  (`host:port` startup banner echoed into the page), which the
+  browser inside the HA Ingress iframe tried to load directly and
+  got "192.168.x.x refused to connect" — that loopback only exists
+  inside the addon container.
+- Bind the webui to `0.0.0.0:8788` again. webui then falls back to
+  `window.location` for self-references and Ingress proxying works
+  end-to-end. nginx still talks to it through `127.0.0.1:8788`
+  internally (0.0.0.0 bind accepts loopback connections too).
+
 ## 1.5.2 — 2026-05-27
 
 - Removed `anthropic_api_key` add-on option. Provider credentials

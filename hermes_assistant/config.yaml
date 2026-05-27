@@ -1,5 +1,5 @@
 name: Hermes Assistant
-version: "1.5.2"
+version: "1.5.3"
 slug: hermes_assistant
 description: Hermes AI Agent (NousResearch) with Web UI and setup terminal for Home Assistant
 url: https://github.com/nuttaruj/hermes-homeassistant
