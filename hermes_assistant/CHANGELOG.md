@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.2.2 — 2026-05-27
+
+- **Removed `webui_password` option**. The webui post-login redirect
+  generated a `Location: /` header — relative to the Ingress iframe
+  root, which the browser resolved against the HA host, bouncing the
+  user to the HA dashboard inside the addon iframe.
+  HA Ingress is now the only auth layer for the Web UI (panel is
+  already admin-only via `panel_admin: true`). The redirect path no
+  longer exists because there is no login form to redirect from.
+- `terminal_password` remains required — the setup terminal is still
+  exposed on LAN port 7681 via the ports mapping.
+
 ## 1.2.1 — 2026-05-27
 
 Two bug fixes from the first real-world install — both caused a

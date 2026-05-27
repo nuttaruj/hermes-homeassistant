@@ -1,5 +1,5 @@
 name: Hermes Assistant
-version: "1.2.1"
+version: "1.2.2"
 slug: hermes_assistant
 description: Hermes AI Agent (NousResearch) with Web UI and setup terminal for Home Assistant
 url: https://github.com/nuttaruj/hermes-homeassistant
@@ -58,7 +58,7 @@ ports_description:
 
 options:
   # ── REQUIRED ────────────────────────────────────────────────────────────
-  webui_password: ""
+  # Terminal is exposed to LAN — password mandatory.
   terminal_password: ""
 
   # ── COMMON ──────────────────────────────────────────────────────────────
@@ -88,7 +88,6 @@ options:
   watch_entities: []
 
 schema:
-  webui_password: password
   terminal_password: password
   timezone: str
   enable_terminal: bool

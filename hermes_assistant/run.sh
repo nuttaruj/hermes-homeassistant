@@ -21,7 +21,6 @@ WEBUI_DST=/data/hermes/webui-app
 WEBUI_SRC=/opt/hermes-webui
 
 # ─── Read options ───────────────────────────────────────────────────────────
-WEBUI_PASSWORD=$(bashio::config 'webui_password')
 TERMINAL_PASSWORD=$(bashio::config 'terminal_password')
 HA_TOKEN_USER=$(bashio::config 'homeassistant_token')
 TZNAME=$(bashio::config 'timezone')
@@ -31,10 +30,6 @@ AUTO_UPDATE_WEBUI=$(bashio::config 'auto_update_webui')
 ANTHROPIC_API_KEY=$(bashio::config 'anthropic_api_key')
 
 # ─── Validate required ──────────────────────────────────────────────────────
-if [ -z "${WEBUI_PASSWORD}" ]; then
-    bashio::log.fatal "webui_password is required (open Configuration tab)"
-    exit 1
-fi
 if bashio::var.true "${ENABLE_TERMINAL}" && [ -z "${TERMINAL_PASSWORD}" ]; then
     bashio::log.fatal "terminal_password is required when enable_terminal=true"
     exit 1
@@ -172,7 +167,12 @@ export HERMES_WEBUI_STATE_DIR=/data/hermes/webui
 # does NOT expose 8787 to the LAN — only the Ingress proxy can reach it.
 export HERMES_WEBUI_HOST=0.0.0.0
 export HERMES_WEBUI_PORT="${WEBUI_PORT}"
-export HERMES_WEBUI_PASSWORD="${WEBUI_PASSWORD}"
+# NO HERMES_WEBUI_PASSWORD: HA Ingress is the only auth layer. The webui
+# post-login redirect bounces to '/' (relative), which the browser inside
+# the Ingress iframe resolves against the HA host root — landing the user
+# on the HA dashboard instead of the webui. Disabling webui auth removes
+# the redirect path entirely. The Ingress panel itself is gated by HA's
+# own login + panel_admin: true (admin-only).
 export HERMES_WEBUI_PYTHON="${WEBUI_DIR}/.venv/bin/python"
 export HERMES_CONFIG_PATH=/data/hermes/config.yaml
 export HERMES_WEBUI_PRESERVE_ENV=1

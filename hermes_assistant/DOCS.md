@@ -21,7 +21,6 @@ to `/data` on first boot**. This means:
 
 1. **Install** the add-on from the store.
 2. Open the **Configuration** tab and set:
-   - `webui_password` — Web UI login password (required)
    - `terminal_password` — protects the setup terminal (required if
      `enable_terminal` is on)
 3. **Start** the add-on.
@@ -45,7 +44,6 @@ the add-on uses the Supervisor proxy automatically (via `homeassistant_api`).
 
 | Option | Required | Description |
 |---|---|---|
-| `webui_password` | yes | Web UI login password |
 | `terminal_password` | when terminal on | Basic-auth password for ttyd |
 | `timezone` | yes | IANA TZ, e.g. `Asia/Bangkok` |
 | `enable_terminal` | yes | `true` to expose setup terminal on port 7681 |
@@ -101,9 +99,10 @@ OAuth tokens expire — refresh this file when needed, or use
 
 ## Security
 
-- **Web UI** binds `127.0.0.1` inside the container and is reachable only
-  via HA Ingress, inheriting HA's auth. `panel_admin: true` restricts the
-  sidebar panel to HA admin users.
+- **Web UI** binds `0.0.0.0` inside the container but is reachable only
+  via HA Ingress (port 8787 is not declared in `ports:` → not LAN-exposed).
+  HA's own login is the only auth layer; `panel_admin: true` restricts
+  the sidebar panel to HA admin users.
 - **Setup terminal** is exposed on the LAN via the Docker port mapping
   (`7681/tcp: 7681`). ttyd basic-auth is the only barrier — **set a
   strong `terminal_password`**. Disable via `enable_terminal: false`
