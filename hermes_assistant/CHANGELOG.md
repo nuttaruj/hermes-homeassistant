@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.6.5 — 2026-05-27
+
+- **Hotfix**: webui showed `AIAgent not available — check that
+  hermes-agent is on sys.path` (and earlier
+  `ModuleNotFoundError: No module named 'dotenv'`) the moment the
+  user tried to chat. Two venvs were diverging: the agent's venv
+  at `/data/hermes/agent-code/venv` had hermes-agent + every
+  transitive dep; the webui's own venv at
+  `/data/hermes/webui-app/.venv` was minimal (pyyaml + cryptography).
+  Setting `HERMES_WEBUI_PYTHON` to the agent venv fixes the
+  import path with no extra install step.
+
 ## 1.6.4 — 2026-05-27
 
 - Terminal welcome message simplified: leads with `hermes setup` as

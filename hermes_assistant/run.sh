@@ -206,7 +206,13 @@ export HERMES_WEBUI_STATE_DIR=/data/hermes/webui
 # accepts loopback connections.
 export HERMES_WEBUI_HOST=0.0.0.0
 export HERMES_WEBUI_PORT="${WEBUI_PORT}"
-export HERMES_WEBUI_PYTHON="${WEBUI_DIR}/.venv/bin/python"
+# Use the AGENT venv (not the webui venv) — it has hermes-agent
+# installed editable plus every transitive dep webui needs at import
+# time (dotenv, anthropic SDK, …). The webui-only venv was minimal
+# (pyyaml + cryptography), which caused 'AIAgent not available' /
+# ModuleNotFoundError: No module named 'dotenv' the moment the user
+# tried to chat.
+export HERMES_WEBUI_PYTHON="${AGENT_DIR}/venv/bin/python"
 export HERMES_CONFIG_PATH=/data/hermes/config.yaml
 export HERMES_WEBUI_PRESERVE_ENV=1
 
