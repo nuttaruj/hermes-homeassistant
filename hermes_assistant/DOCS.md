@@ -67,6 +67,7 @@ the add-on uses the Supervisor proxy automatically (via `homeassistant_api`).
 | `enable_terminal` | yes | `true` to expose setup terminal on port 7681 |
 | `auto_update_agent` | no | `true` → run `hermes update` every container start |
 | `auto_update_webui` | no | `true` → `git pull` Web UI every container start |
+| `auto_configure_mcp` | no | `true` (default) → wire HA Core's MCP Server into Hermes config every boot. Requires the "MCP Server" integration in HA |
 | `homeassistant_token` | no | Override the auto SUPERVISOR_TOKEN with your own LLA |
 | `anthropic_api_key` | no | Bake into `.env`. Skip if configuring via terminal |
 | `watch_entities` | no | List of entity IDs Hermes should watch |

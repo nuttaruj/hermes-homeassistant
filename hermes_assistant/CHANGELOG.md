@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.5.0 — 2026-05-27
+
+- **Auto-configures HA Core's MCP Server as a Hermes MCP source**
+  (`auto_configure_mcp: true` by default).
+  Rewrites the `mcp_servers.homeassistant` entry in
+  `/data/hermes/config.yaml` on every boot using the resolved
+  `HASS_URL` + token, so the rotating `SUPERVISOR_TOKEN` stays
+  fresh and the agent has direct access to all HA entities and
+  services as MCP tools.
+  Requires the "MCP Server" integration enabled in HA
+  (Settings → Devices & Services → Add Integration).
+  Set `auto_configure_mcp: false` to opt out and manage the
+  `mcp_servers:` section by hand.
+- `config.yaml` is now chmod 600 (contains the bearer token).
+
 ## 1.4.0 — 2026-05-27
 
 - **Setup terminal moved inside the addon panel**. A floating "Setup

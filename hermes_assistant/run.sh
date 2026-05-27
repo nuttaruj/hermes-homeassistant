@@ -28,6 +28,7 @@ TZNAME=$(bashio::config 'timezone')
 ENABLE_TERMINAL=$(bashio::config 'enable_terminal')
 AUTO_UPDATE_AGENT=$(bashio::config 'auto_update_agent')
 AUTO_UPDATE_WEBUI=$(bashio::config 'auto_update_webui')
+AUTO_CONFIGURE_MCP=$(bashio::config 'auto_configure_mcp')
 ANTHROPIC_API_KEY=$(bashio::config 'anthropic_api_key')
 
 # ─── Resolve HA token: user option > SUPERVISOR_TOKEN ───────────────────────
@@ -98,6 +99,34 @@ if [ ! -f "${HERMES_CONFIG}" ]; then
             done
         fi
     } > "${HERMES_CONFIG}"
+fi
+
+# ─── Auto-configure HA Core's MCP Server as a Hermes MCP source ─────────────
+# Idempotent: rewrites the homeassistant entry under mcp_servers every boot
+# so the SUPERVISOR_TOKEN stays fresh (the token rotates between sessions).
+# Other mcp_servers entries the user has added by hand are preserved.
+if bashio::var.true "${AUTO_CONFIGURE_MCP}" && [ -n "${HA_TOKEN}" ]; then
+    bashio::log.info "auto_configure_mcp=true — wiring HA MCP Server into config.yaml"
+    # Use the webui venv's python (has PyYAML) — system python doesn't.
+    /opt/hermes-webui/.venv/bin/python - "${HERMES_CONFIG}" "${HASS_URL}" "${HA_TOKEN}" <<'PY'
+import sys, yaml
+path, hass_url, hass_token = sys.argv[1:4]
+try:
+    with open(path) as f:
+        cfg = yaml.safe_load(f) or {}
+except FileNotFoundError:
+    cfg = {}
+cfg.setdefault("mcp_servers", {})
+cfg["mcp_servers"]["homeassistant"] = {
+    "transport": "sse",
+    "url": f"{hass_url.rstrip('/')}/mcp_server/sse",
+    "headers": {"Authorization": f"Bearer {hass_token}"},
+}
+with open(path, "w") as f:
+    yaml.safe_dump(cfg, f, default_flow_style=False, sort_keys=False)
+print(f"[mcp] wrote homeassistant MCP server pointing at {hass_url}/mcp_server/sse")
+PY
+    chmod 600 "${HERMES_CONFIG}"
 fi
 
 # ─── Mirror image seed to /data (first boot only) ───────────────────────────

@@ -1,5 +1,5 @@
 name: Hermes Assistant
-version: "1.4.0"
+version: "1.5.0"
 slug: hermes_assistant
 description: Hermes AI Agent (NousResearch) with Web UI and setup terminal for Home Assistant
 url: https://github.com/nuttaruj/hermes-homeassistant
@@ -75,6 +75,13 @@ options:
   # Pinned to the same branch the image was built from.
   auto_update_webui: false
 
+  # ── INTEGRATIONS ────────────────────────────────────────────────────────
+  # When true, register HA Core's MCP Server as a Hermes MCP source
+  # automatically (re-rendered on every boot). Requires the "MCP Server"
+  # integration enabled in HA: Settings → Devices & Services → Add
+  # Integration → "Model Context Protocol".
+  auto_configure_mcp: true
+
   # ── OPTIONAL ────────────────────────────────────────────────────────────
   # Override the auto-injected SUPERVISOR_TOKEN with your own Long-Lived
   # Access Token. Leave empty to use the supervisor proxy (recommended).
@@ -93,6 +100,7 @@ schema:
   enable_terminal: bool
   auto_update_agent: bool
   auto_update_webui: bool
+  auto_configure_mcp: bool
   homeassistant_token: password?
   anthropic_api_key: password?
   watch_entities:
