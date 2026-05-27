@@ -13,3 +13,6 @@ build/
 .vscode/
 .idea/
 *.swp
+
+# Internal planning docs (never push)
+hermes-addon-spec.md
