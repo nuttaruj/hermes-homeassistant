@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.6.6 — 2026-05-27
+
+Smooth-out pass — kill three known friction points around webui
+self-updates:
+
+- **Dockerfile**: stop writing `api/_version.py` after the git clone.
+  That single-line override is what made the in-app "Update" banner
+  fail with `Updated but stash pop failed — manual merge needed`.
+  webui derives its version from git tags / package metadata on its
+  own, so the manual write was unnecessary in the first place.
+- **run.sh mirror**: after copying `/opt/hermes-webui` to
+  `/data/hermes/webui-app`, run `git reset --hard HEAD && git clean -fd`
+  to guarantee the working tree starts clean. Defensive against any
+  future addon-side edits that might sneak into a tracked path.
+- **run.sh `auto_update_webui`**: before `git pull --ff-only`, drop
+  any stale stash and reset the working tree. The addon never
+  preserves tracked-file edits, so there is nothing to lose — and
+  this turns a fragile pull into one that recovers from prior
+  conflicts on its own.
+
 ## 1.6.5 — 2026-05-27
 
 - **Hotfix**: webui showed `AIAgent not available — check that

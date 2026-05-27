@@ -55,12 +55,14 @@ RUN curl -LsSf https://astral.sh/uv/install.sh \
       | env UV_INSTALL_DIR=/usr/local/bin INSTALLER_NO_MODIFY_PATH=1 sh \
     && uv --version
 
-# Clone hermes-webui at pinned tag + bake version.
-# Keep .git (small after gc) so `git pull` works when mirrored to /data and
-# auto_update_webui=true. Use --depth=1 to minimize clone size.
+# Clone hermes-webui at pinned tag — keep the working tree CLEAN so the
+# in-app "Update" banner (which does `git stash; git pull; git stash pop`)
+# never hits a merge conflict from addon-side overrides. Earlier versions
+# wrote api/_version.py here, which collided with the upstream tag during
+# self-update; webui derives its version from git tags / package metadata
+# on its own, so the manual override is unnecessary.
 RUN git clone --depth=1 --branch "${HERMES_WEBUI_REF}" \
-        https://github.com/nesquena/hermes-webui.git /opt/hermes-webui \
-    && echo "__version__ = '${HERMES_WEBUI_REF}'" > /opt/hermes-webui/api/_version.py
+        https://github.com/nesquena/hermes-webui.git /opt/hermes-webui
 
 # WebUI venv with minimal deps (pyyaml + cryptography)
 RUN uv venv /opt/hermes-webui/.venv --python python3 \

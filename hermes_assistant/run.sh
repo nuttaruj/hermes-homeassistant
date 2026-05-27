@@ -187,9 +187,17 @@ if bashio::var.true "${AUTO_UPDATE_AGENT}" && [ -d "${AGENT_DST}/.git" ]; then
 fi
 
 if bashio::var.true "${AUTO_UPDATE_WEBUI}" && [ -d "${WEBUI_DST}/.git" ]; then
-    bashio::log.info "auto_update_webui=true — git pull hermes-webui"
-    (cd "${WEBUI_DST}" && git pull --ff-only 2>&1 | sed 's/^/  [webui pull] /') || \
-        bashio::log.warning "webui git pull failed — continuing"
+    bashio::log.info "auto_update_webui=true — git pull hermes-webui (auto-resetting any local mods)"
+    (
+        cd "${WEBUI_DST}"
+        # Always reset so a stale stash or stray edit can't block the pull.
+        # The addon never persists tracked-file edits, so there is nothing
+        # to preserve here.
+        git stash drop --quiet 2>/dev/null || true
+        git reset --hard HEAD --quiet 2>/dev/null || true
+        git clean -fd --quiet 2>/dev/null || true
+        git pull --ff-only 2>&1 | sed 's/^/  [webui pull] /'
+    ) || bashio::log.warning "webui git pull failed — continuing"
 fi
 
 # ─── Export envs for hermes-webui ───────────────────────────────────────────
