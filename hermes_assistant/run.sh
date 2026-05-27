@@ -102,12 +102,16 @@ if [ ! -f "${HERMES_CONFIG}" ]; then
 fi
 
 # ─── Auto-configure HA Core's MCP Server as a Hermes MCP source ─────────────
-# Idempotent: rewrites the homeassistant entry under mcp_servers every boot
-# so the SUPERVISOR_TOKEN stays fresh (the token rotates between sessions).
+# Uses HA's Streamable HTTP endpoint /api/mcp (the preferred transport per
+# HA core source; /mcp_server/sse still works but is the legacy path).
+# Omitting `transport:` lets Hermes default to streamable_http when `url`
+# is set (see hermes-agent/tools/mcp_tool.py).
+#
+# Idempotent: rewrites the `homeassistant` entry under mcp_servers every
+# boot so the SUPERVISOR_TOKEN stays fresh (rotates between sessions).
 # Other mcp_servers entries the user has added by hand are preserved.
 if bashio::var.true "${AUTO_CONFIGURE_MCP}" && [ -n "${HA_TOKEN}" ]; then
     bashio::log.info "auto_configure_mcp=true — wiring HA MCP Server into config.yaml"
-    # Use the webui venv's python (has PyYAML) — system python doesn't.
     /opt/hermes-webui/.venv/bin/python - "${HERMES_CONFIG}" "${HASS_URL}" "${HA_TOKEN}" <<'PY'
 import sys, yaml
 path, hass_url, hass_token = sys.argv[1:4]
@@ -118,13 +122,12 @@ except FileNotFoundError:
     cfg = {}
 cfg.setdefault("mcp_servers", {})
 cfg["mcp_servers"]["homeassistant"] = {
-    "transport": "sse",
-    "url": f"{hass_url.rstrip('/')}/mcp_server/sse",
+    "url": f"{hass_url.rstrip('/')}/api/mcp",
     "headers": {"Authorization": f"Bearer {hass_token}"},
 }
 with open(path, "w") as f:
     yaml.safe_dump(cfg, f, default_flow_style=False, sort_keys=False)
-print(f"[mcp] wrote homeassistant MCP server pointing at {hass_url}/mcp_server/sse")
+print(f"[mcp] wrote homeassistant → {hass_url}/api/mcp (streamable_http)")
 PY
     chmod 600 "${HERMES_CONFIG}"
 fi

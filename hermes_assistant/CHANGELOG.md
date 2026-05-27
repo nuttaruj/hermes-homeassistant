@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.5.1 — 2026-05-27
+
+- MCP endpoint switched from the legacy SSE path
+  (`/mcp_server/sse` with `transport: sse`) to the **Streamable HTTP**
+  path (`/api/mcp`) — the transport HA core marks as primary
+  (`STREAMABLE_API` in `homeassistant/components/mcp_server/http.py`).
+  Matches the path used by OpenClaw's auto-config for HA MCP.
+  Hermes defaults to `streamable_http` transport when `url:` is set
+  and no `transport:` key is present (see `tools/mcp_tool.py`).
+
 ## 1.5.0 — 2026-05-27
 
 - **Auto-configures HA Core's MCP Server as a Hermes MCP source**
