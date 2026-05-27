@@ -1,0 +1,153 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "hermes_assistant/**"
+      - ".github/workflows/build.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "hermes_assistant/**"
+      - ".github/workflows/build.yml"
+  workflow_dispatch:
+
+# Cancel superseded runs on the same ref (saves Actions minutes)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint manifest + Dockerfile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate add-on config.yaml
+        run: |
+          # Syntax check via yq (preinstalled on GH runners)
+          yq eval . hermes_assistant/config.yaml > /dev/null
+          # Required-field presence check
+          for f in name version slug arch startup ingress ingress_port options schema; do
+            yq eval ".${f}" hermes_assistant/config.yaml | grep -qv '^null$' \
+              || { echo "::error::config.yaml missing required field: ${f}"; exit 1; }
+          done
+          echo "✓ config.yaml OK"
+
+      - name: Validate build.yaml
+        run: |
+          yq eval . hermes_assistant/build.yaml > /dev/null
+          for arch in amd64 aarch64; do
+            yq eval ".build_from.${arch}" hermes_assistant/build.yaml | grep -q ghcr.io \
+              || { echo "::error::build.yaml missing build_from.${arch}"; exit 1; }
+          done
+          echo "✓ build.yaml OK"
+
+      - name: Validate repository.yaml
+        run: |
+          yq eval . repository.yaml > /dev/null
+          echo "✓ repository.yaml OK"
+
+      - name: Hadolint Dockerfile
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: hermes_assistant/Dockerfile
+          # ignore: line-length warnings, pin-version (we pin via ARG)
+          ignore: DL3008,DL3013,DL3015,DL3018,DL4006,SC2086
+
+      - name: Shellcheck run.sh
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: hermes_assistant
+          # bashio scripts use #!/usr/bin/with-contenv bashio which shellcheck
+          # cannot resolve — point it to bash
+          severity: warning
+        env:
+          SHELLCHECK_OPTS: -s bash -e SC1091,SC2086,SC2034
+
+  build:
+    name: Build ${{ matrix.arch }}
+    needs: lint
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            base: ghcr.io/home-assistant/amd64-base-debian:bookworm
+            platform: linux/amd64
+          - arch: aarch64
+            base: ghcr.io/home-assistant/aarch64-base-debian:bookworm
+            platform: linux/arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        if: matrix.arch == 'aarch64'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build (${{ matrix.arch }})
+        uses: docker/build-push-action@v6
+        with:
+          context: hermes_assistant
+          platforms: ${{ matrix.platform }}
+          build-args: |
+            BUILD_FROM=${{ matrix.base }}
+          push: false
+          load: true
+          tags: hermes-assistant:ci-${{ matrix.arch }}
+          cache-from: type=gha,scope=${{ matrix.arch }}
+          cache-to: type=gha,scope=${{ matrix.arch }},mode=max
+
+      - name: Smoke test — tooling + hermes CLI
+        run: |
+          docker run --rm --platform=${{ matrix.platform }} \
+            hermes-assistant:ci-${{ matrix.arch }} bash -c '
+              set -e
+              echo "--- tool versions ---"
+              ttyd --version
+              uv --version
+              python3 --version
+              jq --version
+              echo ""
+              echo "--- pre-baked agent ---"
+              [ -f /opt/hermes-agent/.prebaked ] && echo "✓ .prebaked marker present"
+              [ -x /usr/local/bin/hermes ] || { echo "::error::hermes dispatcher missing"; exit 1; }
+              echo ""
+              echo "--- hermes CLI (uses /opt seed before mirror) ---"
+              hermes --version
+              echo ""
+              echo "--- mirror to /data + shebang fix ---"
+              mkdir -p /data/hermes
+              cp -a /opt/hermes-agent-code /data/hermes/agent-code
+              find /data/hermes/agent-code/venv/bin -type f -exec \
+                sed -i "s|/opt/hermes-agent-code|/data/hermes/agent-code|g" {} \; 2>/dev/null
+              echo "--- hermes after mirror (should point at /data) ---"
+              out=$(hermes --version 2>&1)
+              echo "$out"
+              echo "$out" | grep -q "Project: /data/hermes/agent-code" \
+                || { echo "::error::dispatcher did not switch to /data"; exit 1; }
+              echo ""
+              echo "--- run.sh syntax ---"
+              bash -n /run.sh && echo "✓ run.sh OK"
+            '
+
+      - name: Image size report
+        run: |
+          docker images hermes-assistant:ci-${{ matrix.arch }} \
+            --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}'
+          sz=$(docker save hermes-assistant:ci-${{ matrix.arch }} | wc -c)
+          mb=$((sz / 1048576))
+          echo "::notice::${{ matrix.arch }} exported size: ${mb} MB"
+          # Hard cap: 800MB exported. Catches accidental bloat regressions.
+          if [ "$mb" -gt 800 ]; then
+            echo "::error::Image size ${mb}MB exceeds 800MB cap"
+            exit 1
+          fi
