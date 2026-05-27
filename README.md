@@ -4,8 +4,7 @@
 
 Run the [Hermes Agent](https://hermes-agent.nousresearch.com/) (NousResearch)
 with [hermes-webui](https://github.com/nesquena/hermes-webui) as a single
-Home Assistant Supervisor add-on. Inspired by
-[OpenClawHomeAssistant](https://github.com/techartdev/OpenClawHomeAssistant).
+Home Assistant Supervisor add-on.
 
 ## What you get
 
