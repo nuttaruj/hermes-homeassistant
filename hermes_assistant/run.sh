@@ -29,7 +29,6 @@ ENABLE_TERMINAL=$(bashio::config 'enable_terminal')
 AUTO_UPDATE_AGENT=$(bashio::config 'auto_update_agent')
 AUTO_UPDATE_WEBUI=$(bashio::config 'auto_update_webui')
 AUTO_CONFIGURE_MCP=$(bashio::config 'auto_configure_mcp')
-ANTHROPIC_API_KEY=$(bashio::config 'anthropic_api_key')
 
 # ─── Resolve HA token: user option > SUPERVISOR_TOKEN ───────────────────────
 if [ -n "${HA_TOKEN_USER}" ]; then
@@ -56,16 +55,26 @@ fi
 # ─── Persistent dirs ────────────────────────────────────────────────────────
 mkdir -p /data/hermes /data/hermes/webui
 
-# ─── .env (mode 600 — secrets) ──────────────────────────────────────────────
+# ─── .env (mode 600 — secrets, MANAGED + USER lines coexist) ────────────────
+# We ONLY rewrite the keys this script owns (HASS_TOKEN, HASS_URL,
+# CLAUDE_CODE_OAUTH_TOKEN). Anything the user added via `hermes setup`
+# (ANTHROPIC_API_KEY, OPENAI_API_KEY, custom provider configs, …) is
+# preserved across boots — a previous version truncated the file each
+# start and wiped those keys.
 ENV_FILE=/data/hermes/.env
-( umask 077 && : > "${ENV_FILE}" )
+( umask 077 && touch "${ENV_FILE}" )
+MANAGED_KEYS=(HASS_TOKEN HASS_URL CLAUDE_CODE_OAUTH_TOKEN)
+for k in "${MANAGED_KEYS[@]}"; do
+    sed -i "/^${k}=/d" "${ENV_FILE}"
+done
+
 if [ -n "${HA_TOKEN}" ]; then
-    echo "HASS_TOKEN=${HA_TOKEN}" >> "${ENV_FILE}"
-    echo "HASS_URL=${HASS_URL}"   >> "${ENV_FILE}"
+    {
+        echo "HASS_TOKEN=${HA_TOKEN}"
+        echo "HASS_URL=${HASS_URL}"
+    } >> "${ENV_FILE}"
 fi
-if [ -n "${ANTHROPIC_API_KEY}" ]; then
-    echo "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}" >> "${ENV_FILE}"
-fi
+
 if [ -f "/config/claude_credentials.json" ]; then
     OAUTH_TOKEN=$(python3 -c "
 import json
@@ -77,7 +86,7 @@ except Exception:
 " 2>/dev/null) || true
     if [ -n "${OAUTH_TOKEN}" ]; then
         echo "CLAUDE_CODE_OAUTH_TOKEN=${OAUTH_TOKEN}" >> "${ENV_FILE}"
-        bashio::log.info "Claude OAuth token loaded"
+        bashio::log.info "Claude OAuth token loaded from /config"
     fi
 fi
 chmod 600 "${ENV_FILE}"

@@ -69,8 +69,12 @@ the add-on uses the Supervisor proxy automatically (via `homeassistant_api`).
 | `auto_update_webui` | no | `true` → `git pull` Web UI every container start |
 | `auto_configure_mcp` | no | `true` (default) → wire HA Core's MCP Server into Hermes config every boot. Requires the "MCP Server" integration in HA |
 | `homeassistant_token` | no | Override the auto SUPERVISOR_TOKEN with your own LLA |
-| `anthropic_api_key` | no | Bake into `.env`. Skip if configuring via terminal |
 | `watch_entities` | no | List of entity IDs Hermes should watch |
+
+All LLM provider credentials (Anthropic, OpenAI, Claude Max OAuth, …)
+are configured via the setup terminal (`hermes setup` /
+`claude setup-token`) and persist in `/data/hermes/.env`. The add-on
+no longer reads provider keys from add-on options.
 
 The Web UI is always served on internal port `8787` via HA Ingress.
 The setup terminal is always served on port `7681` (LAN, port-mapped).

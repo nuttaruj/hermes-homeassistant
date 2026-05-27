@@ -1,5 +1,5 @@
 name: Hermes Assistant
-version: "1.5.1"
+version: "1.5.2"
 slug: hermes_assistant
 description: Hermes AI Agent (NousResearch) with Web UI and setup terminal for Home Assistant
 url: https://github.com/nuttaruj/hermes-homeassistant
@@ -87,10 +87,6 @@ options:
   # Access Token. Leave empty to use the supervisor proxy (recommended).
   homeassistant_token: ""
 
-  # If set, written to Hermes .env. Skip if you'll configure providers
-  # interactively via the setup terminal.
-  anthropic_api_key: ""
-
   # Entities for Hermes to watch. Empty = none.
   watch_entities: []
 
@@ -102,6 +98,5 @@ schema:
   auto_update_webui: bool
   auto_configure_mcp: bool
   homeassistant_token: password?
-  anthropic_api_key: password?
   watch_entities:
     - str?

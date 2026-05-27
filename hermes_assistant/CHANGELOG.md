@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.5.2 — 2026-05-27
+
+- Removed `anthropic_api_key` add-on option. Provider credentials
+  belong in the setup terminal (`hermes setup` / `claude setup-token`)
+  which writes to `/data/hermes/.env` and persists across boots.
+- **Critical fix**: `/data/hermes/.env` was being truncated on every
+  start, which wiped any provider keys the user had set via
+  `hermes setup`. The add-on now only rewrites the keys it owns
+  (`HASS_TOKEN`, `HASS_URL`, `CLAUDE_CODE_OAUTH_TOKEN`) and leaves
+  everything else intact.
+
 ## 1.5.1 — 2026-05-27
 
 - MCP endpoint switched from the legacy SSE path
