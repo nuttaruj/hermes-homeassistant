@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.6.0 — 2026-05-27
+
+- **Removed pre-installed Claude Code CLI** from the image. Baking
+  `@anthropic-ai/claude-code` in biased the add-on toward one
+  provider; the underlying Hermes Agent supports many (Anthropic,
+  OpenAI, Google, local models, …) and `hermes setup` is the
+  provider-neutral entry point.
+- Image shrinks by ~50 MB.
+- Claude Max users can still get the OAuth flow on demand inside
+  the setup terminal — the bundled Node.js install gives `npx`
+  out of the box:
+  ```
+  npx -y @anthropic-ai/claude-code setup-token
+  ```
+- Terminal welcome message rewritten to lead with `hermes setup`
+  and the multi-provider flow.
+
 ## 1.5.4 — 2026-05-27
 
 - **Hotfix**: addon panel showed "refused to connect" inside the HA

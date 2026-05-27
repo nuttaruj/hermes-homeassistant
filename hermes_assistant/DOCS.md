@@ -25,12 +25,21 @@ to `/data` on first boot**. This means:
      `enable_terminal` is on)
 3. **Start** the add-on.
 4. Open the **Web UI** from the sidebar (or `Open Web UI` button).
-5. Open the **Setup Terminal** at `http://HOMEASSISTANT_IP:7681`
-   (user `hermes`, password = `terminal_password`).
+5. Open the **Setup Terminal** — either through the floating
+   gold "Setup Terminal" button at the bottom-right of the Web UI
+   panel, or directly at `<ingress_url>/terminal/`.
    In the terminal you can run:
-   - `claude setup-token` — Claude Max subscription OAuth (no API charges)
-   - `hermes setup` — Hermes' own provider selector (Anthropic, OpenAI, …)
-   - `hermes --help` / `claude --help`
+   - `hermes setup` — interactive wizard for any supported LLM
+     provider (Anthropic, OpenAI, Google, local models, …)
+   - `hermes model` — pick / switch provider + model
+   - `hermes update` — pull the latest agent release
+   - `hermes --help` — full command list
+
+   For Claude Max subscription OAuth (optional, bypasses paid API):
+   ```
+   npx -y @anthropic-ai/claude-code setup-token
+   ```
+   The bundled Node.js install provides `npx` automatically.
 
    Credentials are saved under `/data/hermes/` and persist across
    add-on restarts.

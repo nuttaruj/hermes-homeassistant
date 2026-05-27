@@ -114,22 +114,6 @@ RUN set +e; \
     rm -f /tmp/install-hermes.sh; \
     exit 0
 
-# Pre-install Claude Code CLI so `claude setup-token` works in the setup
-# terminal without npm/npx. Uses the Node.js bundle that hermes-agent's
-# install.sh dropped at /opt/hermes-agent/node. NPM_CONFIG_PREFIX keeps
-# the install scoped to that bundle so it ships in the same COPY layer.
-RUN if [ -x /opt/hermes-agent/node/bin/npm ]; then \
-        export PATH=/opt/hermes-agent/node/bin:$PATH; \
-        export NPM_CONFIG_PREFIX=/opt/hermes-agent/node; \
-        npm install -g --no-fund --no-audit --no-update-notifier \
-            @anthropic-ai/claude-code 2>&1 | tail -10 || true; \
-        if [ -x /opt/hermes-agent/node/bin/claude ]; then \
-            echo ">> Claude Code CLI installed"; \
-        else \
-            echo ">> WARN: Claude Code CLI install failed — terminal will need 'npx @anthropic-ai/claude-code setup-token'"; \
-        fi; \
-    fi
-
 # Strip caches + non-runtime artefacts.
 # KEEP .git for both repos so user can `hermes update` / `git pull` in the
 # live install (mirrored to /data on first boot).
@@ -197,12 +181,6 @@ COPY --from=builder /usr/local/bin/uvx        /usr/local/bin/uvx
 COPY --from=builder /opt/hermes-webui         /opt/hermes-webui
 COPY --from=builder /opt/hermes-agent         /opt/hermes-agent
 COPY --from=builder /opt/hermes-agent-code    /opt/hermes-agent-code
-
-# Symlink Claude Code CLI from the bundled Node.js install to PATH
-RUN if [ -x /opt/hermes-agent/node/bin/claude ]; then \
-        ln -sf /opt/hermes-agent/node/bin/claude /usr/local/bin/claude; \
-        echo ">> /usr/local/bin/claude wired"; \
-    fi
 
 # `hermes` dispatcher — prefers the user-writable mirror at /data
 # (where updates persist), falls back to the pre-baked image copy at /opt
