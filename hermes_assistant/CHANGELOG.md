@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.6.3 — 2026-05-27
+
+- **Claude Max bridge**: when `/config/claude_credentials.json` is
+  present, run.sh now mirrors it to `~/.claude/.credentials.json` —
+  the path Hermes' webui onboarding wizard polls. The
+  "Login with Claude Code" button picks it up immediately instead of
+  waiting forever.
+- Terminal welcome message rewritten: leads with the
+  `hermes setup` + API-key path (works in every container), explains
+  why the in-container `claude` OAuth flow doesn't work (no system
+  keychain → keytar fails), and documents the Mac-bridge workaround.
+- DOCS: "Claude Max users" section rewritten to match reality
+  (in-container `claude login` does not work; only the bridge does).
+- Confirmed via live debugging: claude-code v2.1.x on Linux requires
+  libsecret/keytar to save OAuth tokens. Without it the wizard polls
+  `~/.claude/.credentials.json` forever because nothing writes there.
+
 ## 1.6.2 — 2026-05-27
 
 - Terminal welcome message + DOCS now list provider CLI helpers

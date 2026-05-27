@@ -87,6 +87,14 @@ except Exception:
         echo "CLAUDE_CODE_OAUTH_TOKEN=${OAUTH_TOKEN}" >> "${ENV_FILE}"
         bashio::log.info "Claude OAuth token loaded from /config"
     fi
+    # Also mirror the file to the path Hermes' webui polls
+    # (~/.claude/.credentials.json) so the "Login with Claude Code"
+    # button in the onboarding wizard detects existing credentials
+    # instead of waiting forever for a fresh in-container OAuth.
+    mkdir -p /root/.claude
+    cp /config/claude_credentials.json /root/.claude/.credentials.json
+    chmod 600 /root/.claude/.credentials.json
+    bashio::log.info "Mirrored credentials to ~/.claude/.credentials.json"
 fi
 chmod 600 "${ENV_FILE}"
 
@@ -235,31 +243,27 @@ if bashio::var.true "${ENABLE_TERMINAL}"; then
             echo '  Hermes Setup Terminal'
             echo '=================================================='
             echo ''
-            echo '  Primary entry — handles every supported provider:'
-            echo '    hermes setup     interactive provider wizard'
+            echo '  Easiest path — Anthropic API key:'
+            echo '    1. https://console.anthropic.com/settings/keys → create'
+            echo '    2. hermes setup   → pick Anthropic → paste sk-ant-...'
+            echo ''
+            echo '  Other commands:'
             echo '    hermes model     pick / switch provider+model'
             echo '    hermes update    pull latest agent'
             echo '    hermes --help    all commands'
             echo ''
-            echo '  Provider CLI helpers (optional, npx auto-downloads):'
+            echo '  Claude Max subscription OAuth — NOT supported in'
+            echo '  the in-container `claude` CLI (no system keychain).'
+            echo '  Workaround: copy ~/.claude/.credentials.json from a'
+            echo '  Mac with Claude Code logged in into the addon at'
+            echo '  /config/claude_credentials.json and restart.'
             echo ''
-            echo '    # Anthropic Claude (Claude Max subscription OAuth)'
-            echo '    npx -y @anthropic-ai/claude-code'
-            echo ''
-            echo '    # OpenAI (Codex / GPT)'
-            echo '    npx -y @openai/codex login'
-            echo ''
-            echo '    # Google Gemini'
-            echo '    npx -y @google/gemini-cli auth'
-            echo ''
-            echo '    # GitHub Copilot (via gh)'
-            echo '    gh auth login && gh extension install github/gh-copilot'
-            echo ''
-            echo '    # Aider — pair programmer, multi-provider'
-            echo '    pip install --user aider-chat'
-            echo ''
-            echo '    # Ollama — local models'
-            echo '    curl -fsSL https://ollama.com/install.sh | sh'
+            echo '  Other provider CLIs (optional, npx fetches on demand):'
+            echo '    npx -y @openai/codex login         # OpenAI Codex/GPT'
+            echo '    npx -y @google/gemini-cli auth     # Google Gemini'
+            echo '    gh auth login                      # GitHub Copilot'
+            echo '    pip install --user aider-chat      # Aider'
+            echo '    curl -fsSL https://ollama.com/install.sh | sh   # Ollama'
             echo ''
             echo '=================================================='
             exec bash

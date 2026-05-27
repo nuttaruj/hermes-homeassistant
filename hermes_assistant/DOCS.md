@@ -46,7 +46,6 @@ flow before pointing Hermes at it. The bundled Node.js install gives
 
 | Provider | Command |
 |---|---|
-| Anthropic Claude (Claude Max OAuth) | `npx -y @anthropic-ai/claude-code` |
 | OpenAI Codex / GPT | `npx -y @openai/codex login` |
 | Google Gemini | `npx -y @google/gemini-cli auth` |
 | GitHub Copilot | `gh auth login && gh extension install github/gh-copilot` |
@@ -126,20 +125,30 @@ After that, the `/data` copies are the source of truth.
 
 ## Claude Max users — OAuth credentials
 
-If you subscribe to Claude Max and want to reuse your Claude Code login
-instead of paying per-token via the API, copy your credentials file into
-the add-on config directory:
+Running `claude login` inside the addon's terminal **will not work** —
+Claude Code v2.x stores OAuth tokens in the system keychain
+(macOS Keychain / Linux libsecret), and the addon container has neither.
+The webui's "Login with Claude Code" button has the same limitation.
 
-1. From a machine where Claude Code is logged in:
-   ```
-   cp ~/.claude/.credentials.json /share/claude_credentials.json
-   ```
-2. Move the file into `/config/claude_credentials.json` of this add-on
-   (via the File Editor add-on or SSH).
-3. Restart the add-on. The log will say `Claude OAuth token loaded`.
+To reuse a Claude Max subscription, bridge credentials from a machine
+where Claude Code does work (your Mac, your Linux desktop with
+gnome-keyring):
 
-OAuth tokens expire — refresh this file when needed, or use
-`anthropic_api_key` instead.
+1. On the source machine (with Claude Code logged in):
+   ```
+   cp ~/.claude/.credentials.json ~/claude_credentials.json
+   ```
+2. Copy the file to the addon's config directory at
+   `/addon_configs/<addon_slug>_hermes_assistant/claude_credentials.json`
+   (use the **Samba** or **File Editor** addons in HA, or SSH).
+3. Restart the addon. The log will print
+   `Claude OAuth token loaded from /config` and the file is also mirrored
+   to `~/.claude/.credentials.json` so the webui's
+   "Login with Claude Code" button detects it.
+
+OAuth tokens expire periodically — refresh the file from the source
+machine when that happens, or use a direct Anthropic API key with
+`hermes setup` instead.
 
 ---
 
