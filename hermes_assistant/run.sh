@@ -166,7 +166,11 @@ export HERMES_HOME=/data/hermes
 export HERMES_INSTALL_DIR="${AGENT_DIR}"
 export HERMES_WEBUI_AGENT_DIR="${AGENT_DIR}"
 export HERMES_WEBUI_STATE_DIR=/data/hermes/webui
-export HERMES_WEBUI_HOST=127.0.0.1
+# Bind 0.0.0.0 inside the container. HA Ingress reaches the container
+# via its bridge-network IP (loopback inside the container is not
+# reachable from Supervisor). The port is NOT in `ports:` so the addon
+# does NOT expose 8787 to the LAN — only the Ingress proxy can reach it.
+export HERMES_WEBUI_HOST=0.0.0.0
 export HERMES_WEBUI_PORT="${WEBUI_PORT}"
 export HERMES_WEBUI_PASSWORD="${WEBUI_PASSWORD}"
 export HERMES_WEBUI_PYTHON="${WEBUI_DIR}/.venv/bin/python"
@@ -206,7 +210,11 @@ if bashio::var.true "${ENABLE_TERMINAL}"; then
     bashio::log.info "ttyd PID=$!"
 fi
 
-# ─── Start hermes-webui (foreground) ────────────────────────────────────────
-bashio::log.info "Starting Hermes Web UI on 127.0.0.1:${WEBUI_PORT} (HA Ingress)"
+# ─── Start hermes-webui (foreground, PID 1) ─────────────────────────────────
+# Do NOT use bootstrap.py here — it forks the server to the background and
+# exits, which makes PID 1 in the container terminate and triggers an
+# HA Supervisor restart loop. server.py is the long-running webui process
+# we actually want as PID 1.
+bashio::log.info "Starting Hermes Web UI on 0.0.0.0:${WEBUI_PORT} (HA Ingress)"
 cd "${WEBUI_DIR}"
-exec "${HERMES_WEBUI_PYTHON}" "${WEBUI_DIR}/bootstrap.py" --no-browser
+exec "${HERMES_WEBUI_PYTHON}" "${WEBUI_DIR}/server.py"

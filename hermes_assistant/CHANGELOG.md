@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.2.1 — 2026-05-27
+
+Two bug fixes from the first real-world install — both caused a
+container restart loop (~7 s per cycle):
+
+- **Webui bound 127.0.0.1 inside the container** — Ingress and the
+  HA watchdog reach the container via its bridge-network IP, not its
+  loopback. Bind 0.0.0.0 now. The port is still not in `ports:`, so
+  the addon does NOT expose the Web UI to the LAN — only the Ingress
+  proxy can reach it.
+- **bootstrap.py exits after spawning the server in the background**.
+  PID 1 in the container terminated → Supervisor restarted → loop.
+  Replaced with direct `server.py` invocation so the webui itself is
+  PID 1 and stays in the foreground.
+
 ## 1.2.0 — 2026-05-27
 
 - Pre-built multi-arch images published to
