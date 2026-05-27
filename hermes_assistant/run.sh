@@ -1,19 +1,20 @@
 #!/usr/bin/with-contenv bashio
 # Hermes Assistant — Home Assistant add-on entrypoint
 #
-# Lifecycle:
-#   1. Validate options
-#   2. Resolve HA token (SUPERVISOR_TOKEN auto-fallback)
-#   3. Write secrets to /data/hermes/.env (mode 600)
-#   4. First-boot: mirror agent + webui from image seed (/opt) to /data,
-#      fixing venv shebangs so binaries work from the new path
-#   5. Optional: auto-update agent (`hermes update`) and/or webui (`git pull`)
-#   6. Start ttyd in background — gated on bootstrap completion
-#   7. Exec hermes-webui in foreground (bound 127.0.0.1:8787 → Ingress)
+# Process tree (PID 1 = nginx):
+#   nginx :8787      (Ingress target, multiplexes:)
+#     ├── /          → webui at 127.0.0.1:8788
+#     └── /terminal/ → ttyd  at 127.0.0.1:7681 (--base-path /terminal/)
+#   webui-server.py  (bg, bound 127.0.0.1:8788)
+#   ttyd             (bg, bound 127.0.0.1:7681)
+#
+# First boot mirrors the agent + webui from /opt seeds into /data so user
+# updates ('hermes update', git pull) persist across image rebuilds.
 set -e
 
-WEBUI_PORT=8787
+WEBUI_PORT=8788
 TERMINAL_PORT=7681
+INGRESS_PORT=8787
 
 AGENT_DST=/data/hermes/agent-code
 AGENT_SRC=/opt/hermes-agent-code
@@ -28,12 +29,6 @@ ENABLE_TERMINAL=$(bashio::config 'enable_terminal')
 AUTO_UPDATE_AGENT=$(bashio::config 'auto_update_agent')
 AUTO_UPDATE_WEBUI=$(bashio::config 'auto_update_webui')
 ANTHROPIC_API_KEY=$(bashio::config 'anthropic_api_key')
-
-# ─── Validate required ──────────────────────────────────────────────────────
-if bashio::var.true "${ENABLE_TERMINAL}" && [ -z "${TERMINAL_PASSWORD}" ]; then
-    bashio::log.fatal "terminal_password is required when enable_terminal=true"
-    exit 1
-fi
 
 # ─── Resolve HA token: user option > SUPERVISOR_TOKEN ───────────────────────
 if [ -n "${HA_TOKEN_USER}" ]; then
@@ -72,7 +67,7 @@ if [ -n "${ANTHROPIC_API_KEY}" ]; then
 fi
 if [ -f "/config/claude_credentials.json" ]; then
     OAUTH_TOKEN=$(python3 -c "
-import json, sys
+import json
 try:
     d = json.load(open('/config/claude_credentials.json'))
     print(d.get('claudeAiOauth', {}).get('accessToken', ''))
@@ -86,7 +81,7 @@ except Exception:
 fi
 chmod 600 "${ENV_FILE}"
 
-# ─── Hermes config.yaml (created once, preserved across updates) ────────────
+# ─── Hermes config.yaml (created once) ──────────────────────────────────────
 HERMES_CONFIG=/data/hermes/config.yaml
 if [ ! -f "${HERMES_CONFIG}" ]; then
     bashio::log.info "Creating initial Hermes config.yaml"
@@ -106,18 +101,12 @@ if [ ! -f "${HERMES_CONFIG}" ]; then
 fi
 
 # ─── Mirror image seed to /data (first boot only) ───────────────────────────
-# Why: /opt/* is image-immutable. To let `hermes update` / `git pull` persist,
-# we mirror once into /data and run from there. Subsequent rebuilds (after
-# bumping the add-on) DO NOT overwrite /data — user keeps their version.
 BOOTSTRAP_LOCK=/data/hermes/.bootstrap-lock
 
 mirror_with_shebang_fix() {
     local src=$1 dst=$2
     bashio::log.info "Mirroring ${src} → ${dst} (this may take ~30s on slow storage)"
     cp -a "${src}" "${dst}"
-    # Rewrite uv-generated absolute-path shebangs in venv binaries so they
-    # resolve under the new location. python/python3/python3.X symlinks point
-    # at /usr/bin/python3.X (system) and don't need touching.
     for venv_bin in "${dst}/venv/bin" "${dst}/.venv/bin"; do
         if [ -d "${venv_bin}" ]; then
             find "${venv_bin}" -type f -exec sed -i \
@@ -136,7 +125,6 @@ if [ ! -d "${WEBUI_DST}" ] && [ -d "${WEBUI_SRC}" ]; then
 fi
 rm -f "${BOOTSTRAP_LOCK}"
 
-# Determine effective install dirs (mirror if present, else image seed)
 [ -d "${AGENT_DST}/venv" ] && AGENT_DIR="${AGENT_DST}" || AGENT_DIR="${AGENT_SRC}"
 [ -d "${WEBUI_DST}/.venv" ] && WEBUI_DIR="${WEBUI_DST}" || WEBUI_DIR="${WEBUI_SRC}"
 bashio::log.info "Agent dir: ${AGENT_DIR}"
@@ -147,13 +135,13 @@ if bashio::var.true "${AUTO_UPDATE_AGENT}" && [ -d "${AGENT_DST}/.git" ]; then
     bashio::log.info "auto_update_agent=true — running hermes update"
     HERMES_HOME=/data/hermes /usr/local/bin/hermes update 2>&1 \
         | sed 's/^/  [hermes update] /' || \
-        bashio::log.warning "hermes update failed — continuing with current version"
+        bashio::log.warning "hermes update failed — continuing"
 fi
 
 if bashio::var.true "${AUTO_UPDATE_WEBUI}" && [ -d "${WEBUI_DST}/.git" ]; then
     bashio::log.info "auto_update_webui=true — git pull hermes-webui"
     (cd "${WEBUI_DST}" && git pull --ff-only 2>&1 | sed 's/^/  [webui pull] /') || \
-        bashio::log.warning "webui git pull failed — continuing with current version"
+        bashio::log.warning "webui git pull failed — continuing"
 fi
 
 # ─── Export envs for hermes-webui ───────────────────────────────────────────
@@ -161,31 +149,39 @@ export HERMES_HOME=/data/hermes
 export HERMES_INSTALL_DIR="${AGENT_DIR}"
 export HERMES_WEBUI_AGENT_DIR="${AGENT_DIR}"
 export HERMES_WEBUI_STATE_DIR=/data/hermes/webui
-# Bind 0.0.0.0 inside the container. HA Ingress reaches the container
-# via its bridge-network IP (loopback inside the container is not
-# reachable from Supervisor). The port is NOT in `ports:` so the addon
-# does NOT expose 8787 to the LAN — only the Ingress proxy can reach it.
-export HERMES_WEBUI_HOST=0.0.0.0
+export HERMES_WEBUI_HOST=127.0.0.1
 export HERMES_WEBUI_PORT="${WEBUI_PORT}"
-# NO HERMES_WEBUI_PASSWORD: HA Ingress is the only auth layer. The webui
-# post-login redirect bounces to '/' (relative), which the browser inside
-# the Ingress iframe resolves against the HA host root — landing the user
-# on the HA dashboard instead of the webui. Disabling webui auth removes
-# the redirect path entirely. The Ingress panel itself is gated by HA's
-# own login + panel_admin: true (admin-only).
 export HERMES_WEBUI_PYTHON="${WEBUI_DIR}/.venv/bin/python"
 export HERMES_CONFIG_PATH=/data/hermes/config.yaml
 export HERMES_WEBUI_PRESERVE_ENV=1
 
-# ─── ttyd (background) ──────────────────────────────────────────────────────
+# ─── Start webui (background, loopback only — nginx fronts it) ──────────────
+bashio::log.info "Starting Hermes Web UI bg on 127.0.0.1:${WEBUI_PORT}"
+cd "${WEBUI_DIR}"
+"${HERMES_WEBUI_PYTHON}" "${WEBUI_DIR}/server.py" &
+WEBUI_PID=$!
+bashio::log.info "webui PID=${WEBUI_PID}"
+
+# ─── Start ttyd (background, loopback only — nginx fronts it) ───────────────
 if bashio::var.true "${ENABLE_TERMINAL}"; then
-    bashio::log.info "Starting setup terminal on port ${TERMINAL_PORT}"
-    /usr/local/bin/ttyd \
-        --port "${TERMINAL_PORT}" \
-        --interface 0.0.0.0 \
-        --credential "hermes:${TERMINAL_PASSWORD}" \
-        --writable \
-        --check-origin \
+    # --base-path /terminal/ so ttyd generates HTML with that prefix
+    # (nginx sub_filter then rewrites to include the Ingress prefix).
+    # No --credential here: HA Ingress is the only auth boundary and the
+    # panel is already restricted by panel_admin: true.
+    TTYD_ARGS=(
+        --port "${TERMINAL_PORT}"
+        --interface 127.0.0.1
+        --base-path /terminal
+        --writable
+    )
+    # Keep optional ttyd basic-auth as defense-in-depth for users who
+    # configure terminal_password.
+    if [ -n "${TERMINAL_PASSWORD}" ]; then
+        TTYD_ARGS+=( --credential "hermes:${TERMINAL_PASSWORD}" )
+        bashio::log.info "ttyd: basic-auth enabled (user=hermes)"
+    fi
+    bashio::log.info "Starting ttyd bg on 127.0.0.1:${TERMINAL_PORT} (/terminal/)"
+    /usr/local/bin/ttyd "${TTYD_ARGS[@]}" \
         bash -l -c "
             while [ -f ${BOOTSTRAP_LOCK} ]; do
                 echo 'Waiting for Hermes bootstrap…'; sleep 2;
@@ -200,25 +196,18 @@ if bashio::var.true "${ENABLE_TERMINAL}"; then
             echo ''
             echo '  Hermes:'
             echo '    hermes setup     configure LLM provider (one-time)'
-            echo '    hermes update    pull latest agent (persists in /data)'
-            echo '    hermes --help    all commands'
+            echo '    hermes update    pull latest agent'
             echo ''
             echo '  Claude Code (for Claude Max subscription OAuth):'
-            echo '    claude setup-token    paste verifier from claude.ai'
-            echo '    claude --version'
+            echo '    claude setup-token'
             echo ''
             echo '=================================================='
             exec bash
-        " \
-        &
-    bashio::log.info "ttyd PID=$!"
+        " &
+    TTYD_PID=$!
+    bashio::log.info "ttyd PID=${TTYD_PID}"
 fi
 
-# ─── Start hermes-webui (foreground, PID 1) ─────────────────────────────────
-# Do NOT use bootstrap.py here — it forks the server to the background and
-# exits, which makes PID 1 in the container terminate and triggers an
-# HA Supervisor restart loop. server.py is the long-running webui process
-# we actually want as PID 1.
-bashio::log.info "Starting Hermes Web UI on 0.0.0.0:${WEBUI_PORT} (HA Ingress)"
-cd "${WEBUI_DIR}"
-exec "${HERMES_WEBUI_PYTHON}" "${WEBUI_DIR}/server.py"
+# ─── nginx (foreground, PID 1) ──────────────────────────────────────────────
+bashio::log.info "Starting nginx :${INGRESS_PORT} multiplex (/, /terminal/)"
+exec /usr/sbin/nginx -c /etc/nginx/nginx.conf

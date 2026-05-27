@@ -1,5 +1,5 @@
 name: Hermes Assistant
-version: "1.3.0"
+version: "1.4.0"
 slug: hermes_assistant
 description: Hermes AI Agent (NousResearch) with Web UI and setup terminal for Home Assistant
 url: https://github.com/nuttaruj/hermes-homeassistant
@@ -50,15 +50,15 @@ backup_exclude:
   - "hermes/webui/cache/*"
   - "hermes/.cache/*"
 
-# Terminal port published to LAN; webui served only via Ingress.
-ports:
-  7681/tcp: 7681
-ports_description:
-  7681/tcp: "Hermes setup terminal (ttyd) — protect with terminal_password"
+# Webui + setup terminal both served via HA Ingress (multiplexed through
+# nginx inside the container). Neither is exposed to the LAN. The optional
+# LAN port mapping is removed — terminal is reachable only via the Ingress
+# panel at <ingress_url>/terminal/.
 
 options:
-  # ── REQUIRED ────────────────────────────────────────────────────────────
-  # Terminal is exposed to LAN — password mandatory.
+  # Terminal basic-auth (optional). HA Ingress + panel_admin: true is the
+  # primary auth; setting this adds a second factor in case the container
+  # ever gets reached outside Ingress.
   terminal_password: ""
 
   # ── COMMON ──────────────────────────────────────────────────────────────
@@ -88,7 +88,7 @@ options:
   watch_entities: []
 
 schema:
-  terminal_password: password
+  terminal_password: password?
   timezone: str
   enable_terminal: bool
   auto_update_agent: bool

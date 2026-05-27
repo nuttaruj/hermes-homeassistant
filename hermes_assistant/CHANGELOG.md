@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.4.0 — 2026-05-27
+
+- **Setup terminal moved inside the addon panel**. A floating "Setup
+  Terminal" button is injected at the bottom-right of the Web UI; click
+  it and the same Ingress iframe navigates to `/terminal/` — no need
+  to remember an IP:port URL.
+- nginx multiplexes both services behind the single Ingress port:
+  - `/` → Web UI (127.0.0.1:8788)
+  - `/terminal/` → ttyd (127.0.0.1:7681, `--base-path /terminal/`)
+- `terminal_password` is now optional (HA Ingress + `panel_admin: true`
+  is the primary auth; the password adds defense in depth).
+- LAN port mapping (7681) **removed** — the terminal is reachable
+  only via the HA addon panel, never from the LAN.
+
 ## 1.3.0 — 2026-05-27
 
 - **Pre-installed `claude` CLI** (`@anthropic-ai/claude-code`) via the

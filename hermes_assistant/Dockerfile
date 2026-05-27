@@ -173,8 +173,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PATH=/usr/local/bin:/usr/bin:/bin
 
 # Runtime apt — no compilers, no pip, no tini, no tzdata (base has it).
-# Keep: bash/curl/git/jq/python/openssh-client/ffmpeg/ripgrep — used by Hermes
-# tools at runtime.
+# Keep: bash/curl/git/jq/python/openssh-client/ffmpeg/ripgrep — used by Hermes.
+# nginx-light multiplexes webui + ttyd behind a single Ingress port.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
@@ -186,6 +186,7 @@ RUN apt-get update \
         openssh-client \
         ffmpeg \
         ripgrep \
+        nginx-light \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -220,9 +221,11 @@ RUN printf '%s\n' \
     > /usr/local/bin/hermes \
     && chmod +x /usr/local/bin/hermes
 
-# Add-on entrypoint
+# Add-on entrypoint + nginx multiplex config
 COPY run.sh /run.sh
-RUN chmod +x /run.sh
+COPY nginx.conf /etc/nginx/nginx.conf
+RUN chmod +x /run.sh \
+    && mkdir -p /run/nginx /var/log/nginx
 
 EXPOSE 8787 7681
 
