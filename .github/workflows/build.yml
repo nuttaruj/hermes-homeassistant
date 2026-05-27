@@ -54,8 +54,12 @@ jobs:
         uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: hermes_assistant/Dockerfile
-          # ignore: line-length warnings, pin-version (we pin via ARG)
-          ignore: DL3008,DL3013,DL3015,DL3018,DL4006,SC2086
+          # DL3006 — `FROM ${BUILD_FROM}` uses an ARG that holds a tagged
+          #          image; hadolint cannot resolve ARGs and flags falsely.
+          # DL3008/3013/3015/3018 — apt/pip version pinning (we trust upstream
+          #          + HA base image security updates).
+          # DL4006 — SHELL pipefail (we set -e in apt RUN explicitly).
+          ignore: DL3006,DL3008,DL3013,DL3015,DL3018,DL4006,SC2086
 
       - name: Shellcheck run.sh
         uses: ludeeus/action-shellcheck@master
