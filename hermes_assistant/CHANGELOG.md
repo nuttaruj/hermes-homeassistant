@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.5.4 — 2026-05-27
+
+- **Hotfix**: addon panel showed "refused to connect" inside the HA
+  Ingress iframe even though direct access to the Ingress URL worked.
+  Root cause confirmed by live browser inspection:
+  HA wraps the addon iframe with `sandbox=""` (most restrictive),
+  which assigns it a **null origin**. webui replies with
+  `X-Frame-Options: SAMEORIGIN`, the browser then compares
+  null != `http://<ha-host>:8123` → **refuses to render the frame**.
+  nginx now strips `X-Frame-Options` and `Content-Security-Policy`
+  from upstream responses before passing them through, so HA's
+  sandboxed iframe can embed the panel normally.
+
 ## 1.5.3 — 2026-05-27
 
 - **Hotfix**: webui rendered "127.0.0.1:8788" in its HTML
