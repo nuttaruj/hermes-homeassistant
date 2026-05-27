@@ -1,5 +1,5 @@
 name: Hermes Assistant
-version: "1.1.0"
+version: "1.2.0"
 slug: hermes_assistant
 description: Hermes AI Agent (NousResearch) with Web UI and setup terminal for Home Assistant
 url: https://github.com/nuttaruj/hermes-homeassistant
@@ -7,6 +7,12 @@ url: https://github.com/nuttaruj/hermes-homeassistant
 arch:
   - amd64
   - aarch64
+
+# Pre-built multi-arch images published from CI to GHCR. {arch} is
+# substituted by HA Supervisor. If the image is unreachable (e.g. first
+# install before the package was set public), Supervisor falls back to
+# building locally from Dockerfile + build.yaml — slower but never fails.
+image: ghcr.io/nuttaruj/{arch}-hermes-assistant
 
 startup: services
 boot: auto

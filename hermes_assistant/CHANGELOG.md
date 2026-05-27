@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.0 — 2026-05-27
+
+- Pre-built multi-arch images published to
+  `ghcr.io/nuttaruj/{arch}-hermes-assistant`
+- First install drops from ~10–15 min (local Dockerfile build) to
+  ~1–2 min (HA pulls the prebuilt image)
+- Dockerfile + build.yaml retained as fallback when the registry image
+  is unreachable
+
 ## 1.1.0 — 2026-05-26
 
 - **In-place updates without re-pushing the add-on**:
