@@ -27,7 +27,10 @@ panel_admin: true
 
 # Auto-inject SUPERVISOR_TOKEN so Hermes can call HA without a user-managed LLA.
 homeassistant_api: true
-hassio_api: false
+# Allow Hermes to use the Supervisor REST API for add-on-store operations.
+# The manager role is required for install/update operations; do not use admin.
+hassio_api: true
+hassio_role: manager
 
 # Auto-restart by HA if the WebUI health endpoint stops responding.
 watchdog: "tcp://[HOST]:[PORT:8787]/"

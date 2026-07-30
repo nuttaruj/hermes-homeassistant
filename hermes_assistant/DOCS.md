@@ -68,6 +68,12 @@ container; the terminal is the only thing on the LAN port.
 You do **not** need to create a Home Assistant Long-Lived Access Token —
 the add-on uses the Supervisor proxy automatically (via `homeassistant_api`).
 
+The add-on also has the Home Assistant Supervisor API `manager` role. This
+allows Hermes to inspect the add-on store and to install, update, start, or
+stop add-ons through the Supervisor API without UI automation. It does not
+grant the broader `admin` role. Review and approve any request that changes
+add-ons, repositories, backups, or host-level settings.
+
 ---
 
 ## Configuration options
