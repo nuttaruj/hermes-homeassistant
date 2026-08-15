@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.6.7 — 2026-08-15
+
+Fix the add-on going permanently dead after Hermes restarts itself.
+
+- **run.sh**: `server.py` was launched with a bare `&` and nothing ever
+  supervised it — the file contained no `wait` and no `trap`, and the
+  captured `WEBUI_PID` was only ever used in a log line. Because the
+  container's lifecycle is bound to the `exec`'d nginx, a webui that
+  exited left the add-on reporting `started` with a dead UI forever.
+  It now runs under a respawn supervisor: relaunch after 2s, and on
+  five exits inside 30s back off 5s → 10s → … → 300s so a
+  deterministic startup crash can't spin the CPU.
+
+  Note for future edits: the `set +e` inside that subshell is load
+  bearing. The bashio shebang wrapper turns on `errexit`, `errtrace`,
+  `nounset`, `pipefail` and `inherit_errexit` before this script is
+  sourced, and a `while` loop *body* is not an errexit-exempt context —
+  without it the supervisor dies on the first non-zero exit and the
+  original bug comes back, minus the log lines.
+
+- **run.sh**: a `SIGTERM` trap tears the supervisor down on add-on stop.
+  webui installs no signal handler of its own, so it dies with status
+  143 on shutdown, which an untrapped loop would read as a crash and
+  respawn mid-teardown. The backoff sleeps in the background and is
+  `wait`ed on, so the trap fires during a backoff instead of being
+  deferred until the sleep returns.
+
+- **run.sh**: correct the file header's process tree. It claimed
+  `PID 1 = nginx`; PID 1 is actually s6-svscan from the HA base image's
+  `/init` entrypoint, and the container halts when the s6 CMD (this
+  script → nginx) returns. The wrong model in that comment is what
+  hid this bug.
+
 ## 1.6.6 — 2026-05-27
 
 Smooth-out pass — kill three known friction points around webui

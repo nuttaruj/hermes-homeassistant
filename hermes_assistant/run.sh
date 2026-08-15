@@ -1,11 +1,13 @@
 #!/usr/bin/with-contenv bashio
 # Hermes Assistant — Home Assistant add-on entrypoint
 #
-# Process tree (PID 1 = nginx):
-#   nginx :8787      (Ingress target, multiplexes:)
+# Process tree (PID 1 = s6-svscan from the HA base image's /init entrypoint;
+# this script is the s6 CMD, and the container halts when it returns — which
+# means when the exec'd nginx below returns, NOT when webui dies):
+#   nginx :8787      (exec'd; Ingress target, multiplexes:)
 #     ├── /          → webui at 127.0.0.1:8788
 #     └── /terminal/ → ttyd  at 127.0.0.1:7681 (--base-path /terminal/)
-#   webui-server.py  (bg, bound 127.0.0.1:8788)
+#   webui supervisor (bg subshell; respawns server.py on 127.0.0.1:8788)
 #   ttyd             (bg, bound 127.0.0.1:7681)
 #
 # First boot mirrors the agent + webui from /opt seeds into /data so user
@@ -231,11 +233,72 @@ export HERMES_CONFIG_PATH=/data/hermes/config.yaml
 export HERMES_WEBUI_PRESERVE_ENV=1
 
 # ─── Start webui (background, loopback only — nginx fronts it) ──────────────
+# Wrapped in a respawn supervisor. webui restarts itself on self-update and
+# on some in-app actions; when it does so by exiting (rather than execv'ing
+# in place) nothing used to bring it back, and the add-on stayed "started"
+# forever with a dead UI because nginx — not webui — is the process the
+# container lifecycle is bound to.
+#
+# `set +e` is NOT optional: the bashio shebang wrapper enables errexit,
+# errtrace, nounset, pipefail and inherit_errexit before this script is
+# sourced, and line 13 sets -e again. A while-loop *body* is not an
+# errexit-exempt context, so without it the supervisor would die on
+# server.py's first non-zero exit and never respawn.
 bashio::log.info "Starting Hermes Web UI bg on 0.0.0.0:${WEBUI_PORT} (nginx fronts via loopback)"
 cd "${WEBUI_DIR}"
-"${HERMES_WEBUI_PYTHON}" "${WEBUI_DIR}/server.py" &
-WEBUI_PID=$!
-bashio::log.info "webui PID=${WEBUI_PID}"
+(
+    set +e
+    child=""
+    napper=""
+
+    # Don't resurrect webui while the add-on is shutting down. webui installs
+    # no SIGTERM handler, so it dies with status 143 and would otherwise look
+    # like a crash worth respawning.
+    _shutdown() {
+        trap - TERM
+        [ -n "${napper}" ] && kill -TERM "${napper}" 2>/dev/null
+        [ -n "${child}" ]  && kill -TERM "${child}"  2>/dev/null
+        exit 0
+    }
+    trap _shutdown TERM
+
+    # Sleep in the background and wait on it, so _shutdown fires during a
+    # backoff instead of being deferred until the sleep returns.
+    nap() { sleep "$1" & napper=$!; wait "${napper}"; napper=""; }
+
+    fails=0
+    delay=5
+    while true; do
+        started=$(date +%s)
+        "${HERMES_WEBUI_PYTHON}" "${WEBUI_DIR}/server.py" &
+        child=$!
+        bashio::log.info "webui server.py PID=${child}"
+        wait "${child}"
+        rc=$?
+        child=""
+        ran=$(( $(date +%s) - started ))
+
+        # 30s, not 10s: a crash on the first chat request lands well past 10s
+        # and would otherwise never trip the backoff.
+        if [ "${ran}" -lt 30 ]; then
+            fails=$(( fails + 1 ))
+        else
+            fails=0
+            delay=5
+        fi
+
+        if [ "${fails}" -ge 5 ]; then
+            bashio::log.error "webui exited ${fails}x within 30s (rc=${rc}) — backing off ${delay}s"
+            nap "${delay}"
+            [ "${delay}" -lt 300 ] && delay=$(( delay * 2 ))
+        else
+            bashio::log.warning "webui exited after ${ran}s (rc=${rc}) — respawning in 2s"
+            nap 2
+        fi
+    done
+) &
+WEBUI_SUP_PID=$!
+bashio::log.info "webui respawn supervisor PID=${WEBUI_SUP_PID}"
 
 # ─── Start ttyd (background, loopback only — nginx fronts it) ───────────────
 if bashio::var.true "${ENABLE_TERMINAL}"; then
