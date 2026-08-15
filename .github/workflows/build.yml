@@ -146,7 +146,10 @@ jobs:
               echo "--- hermes after mirror (should point at /data) ---"
               out=$(hermes --version 2>&1)
               echo "$out"
-              echo "$out" | grep -q "Project: /data/hermes/agent-code" \
+              # Accept either label: hermes-agent renamed "Project:" to
+              # "Install directory:" in v0.20.1 (2026-08-13). HERMES_AGENT_REF
+              # is "main", so this output tracks upstream and can rename again.
+              echo "$out" | grep -qE "(Project|Install directory): /data/hermes/agent-code" \
                 || { echo "::error::dispatcher did not switch to /data"; exit 1; }
               echo ""
               echo "--- run.sh syntax ---"
