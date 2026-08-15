@@ -1,5 +1,5 @@
 name: Hermes Assistant
-version: "1.6.7"
+version: "1.6.8"
 slug: hermes_assistant
 description: Hermes AI Agent (NousResearch) with Web UI and setup terminal for Home Assistant
 url: https://github.com/nuttaruj/hermes-homeassistant
@@ -30,7 +30,21 @@ homeassistant_api: true
 hassio_api: false
 
 # Auto-restart by HA if the WebUI health endpoint stops responding.
-watchdog: "tcp://[HOST]:[PORT:8787]/"
+#
+# Must be http://, not tcp://. A tcp:// probe resolves to a bare 0.5s socket
+# connect (supervisor/utils check_port), and port 8787 is nginx — which stays
+# up whether or not the webui behind it on 8788 is alive, so the probe passed
+# forever while the UI was dead. http:// traverses nginx to the webui and
+# counts any status >= 300 as a failure (supervisor/apps/app.py
+# watchdog_application), so a crashed webui shows up as nginx's 502. The probe
+# also has a 10s total timeout (WATCHDOG_TIMEOUT), which is the only thing that
+# catches a webui that hangs instead of exiting — run.sh's respawn supervisor
+# cannot see that case, because the process never dies.
+#
+# NOTE: this key only supplies the probe target. The watchdog is armed by a
+# per-installation toggle that defaults to OFF — turn it on at
+# Settings -> Add-ons -> Hermes Assistant -> Watchdog.
+watchdog: "http://[HOST]:[PORT:8787]/health"
 
 # Persistent state lives in /data/hermes (managed by Supervisor).
 # /config is the addon's user-editable config dir (claude_credentials.json etc.).

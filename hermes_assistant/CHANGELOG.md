@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.6.8 — 2026-08-15
+
+Close the two gaps 1.6.7's respawn supervisor could not cover.
+
+- **config.yaml**: the watchdog probe was `tcp://[HOST]:[PORT:8787]/`,
+  which resolves to a bare 0.5s socket connect against port 8787 — nginx.
+  nginx stays up whether or not the webui behind it on 8788 is alive, so
+  the probe reported healthy for as long as the container ran. It is now
+  `http://[HOST]:[PORT:8787]/health`, which traverses nginx to the webui
+  and counts any status >= 300 as a failure, so a dead backend surfaces
+  as nginx's 502.
+
+  This also covers the one failure the respawn supervisor structurally
+  cannot see: a webui that **hangs** rather than exits. The process never
+  dies, so no loop notices, but the probe's 10s timeout does.
+
+  The `watchdog:` key only supplies the probe target — arming it is a
+  per-installation toggle that defaults to **off**. Turn it on at
+  Settings → Add-ons → Hermes Assistant → Watchdog.
+
+- **Dockerfile**: pin `HERMES_AGENT_REF` to `v2026.8.13` instead of
+  tracking `main`. A floating ref meant every rebuild seeded a different
+  agent version, so two users on the same add-on version could be running
+  different software, and an upstream cosmetic change could turn the build
+  red without anything here changing — which is exactly what happened when
+  v0.20.1 renamed `hermes --version`'s "Project:" label and broke the CI
+  smoke test. Anyone who wants newer can still set `auto_update_agent:
+  true`, which runs `hermes update` against the /data mirror at boot.
+
 ## 1.6.7 — 2026-08-15
 
 Fix the add-on going permanently dead after Hermes restarts itself.

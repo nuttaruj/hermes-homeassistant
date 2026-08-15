@@ -12,7 +12,14 @@ ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base-debian:bookworm
 FROM ${BUILD_FROM} AS builder
 
 ARG HERMES_WEBUI_REF=v0.51.137
-ARG HERMES_AGENT_REF=main
+# Pinned, not "main". A floating ref means every rebuild seeds a different
+# agent version, so two users on the same add-on version get different
+# software and a cosmetic upstream change can turn the build red (it did:
+# v0.20.1 renamed `hermes --version`'s "Project:" label and broke the CI
+# smoke test). Users who want newer can still set auto_update_agent: true,
+# which runs `hermes update` against the /data mirror at every boot.
+# Bump this deliberately; check https://github.com/NousResearch/hermes-agent/releases
+ARG HERMES_AGENT_REF=v2026.8.13
 ARG TTYD_VERSION=1.7.7
 
 ENV DEBIAN_FRONTEND=noninteractive \
